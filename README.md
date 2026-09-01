@@ -1,9 +1,9 @@
 # VS Code Sandboxes
 
-Downloadable macOS applications that create reproducible development environments
+Downloadable macOS applications and Windows executables that create reproducible development environments
 with Docker Sandboxes and open them in Visual Studio Code.
 
-Each sandbox keeps project files on your Mac while running the development tools,
+Each sandbox keeps project files on your computer while running the development tools,
 language runtime, and selected coding agent in an isolated sandbox.
 
 ## Available sandboxes
@@ -26,13 +26,14 @@ Bioinformatics Sandbox creates a language-neutral scientific project for mixed P
 R, notebooks, command-line tools, and containerized workloads. It provides the
 code/data layout, VS Code tooling, and either Codex or Claude Code.
 
-## Before you install
+## Before you install on macOS
 
 Docker Sandboxes currently requires an Apple silicon Mac running macOS Sonoma
 14 or newer. Install and configure:
 
 - [Git](https://git-scm.com/download/mac);
-- the Docker CLI and a running Docker engine, such as
+- for **Python Sandbox** and **R Sandbox** only, the Docker CLI and a running
+  Docker engine, such as
   [Docker Desktop](https://www.docker.com/products/docker-desktop/);
 - [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/install/) with the
   `sbx` command, version 0.39.0 or newer;
@@ -91,15 +92,49 @@ Control-click **R Sandbox** in Applications, choose **Open**, and confirm
 The app is currently unsigned. If macOS blocks its first launch, Control-click
 **Bioinformatics Sandbox** in Applications, choose **Open**, and confirm **Open**.
 
+## Install on Windows
+
+Windows executables are available only for 64-bit Intel/AMD Windows 11 systems
+with Windows Hypervisor Platform enabled. Windows 10, Windows Server, ARM64
+Windows, and systems without usable hardware virtualization are not supported by
+Docker Sandboxes.
+
+Install these prerequisites first:
+
+- [Git for Windows](https://git-scm.com/download/win), including Git Bash;
+- the Windows OpenSSH Client optional feature;
+- [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/install/) 0.39.0 or
+  newer, then sign in with `sbx login`;
+- [Visual Studio Code](https://code.visualstudio.com/) and access to Codex or
+  Claude Code; and
+- for **Python Sandbox** and **R Sandbox** only, a running Docker engine on a
+  Windows edition and build supported by
+  [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/).
+
+Bioinformatics Sandbox does not require Docker Desktop; workload containers use
+the private Docker daemon supplied inside Docker Sandboxes.
+
+Download the appropriate file from the GitHub Release:
+
+- `Python-Sandbox.exe`;
+- `R-Sandbox.exe`; or
+- `Bioinformatics-Sandbox.exe`.
+
+The executables are currently unsigned. Windows SmartScreen may show an
+unrecognized-app warning. Run an executable only if it came from this repository's
+GitHub Release. The launcher checks compatibility and prerequisites before creating
+or modifying a project; it does not install Docker, enable Windows features, or
+request administrator privileges.
+
 ## Create a Python project
 
-1. Open **Python Sandbox** from Applications.
-2. A Terminal window opens and downloads the current setup files.
+1. Open **Python Sandbox** on macOS, or double-click `Python-Sandbox.exe` on Windows.
+2. A console window opens and downloads the current setup files.
 3. Enter a Python version in `major.minor` or `major.minor.patch` form, such as
    `3.13` or `3.13.2`. The sandbox uses the corresponding major/minor series.
 4. Enter `codex` or `claude` to select the coding agent.
-5. Enter the directory for the project, or press Return to use
-   `~/Desktop/python-sandbox-project`. A missing directory is created.
+5. Enter the directory for the project, or press Return to use the displayed
+   default project directory. A missing directory is created.
 6. Wait while the application prepares the repository, builds the sandbox,
    configures SSH, installs the VS Code extensions, and opens the project in
    Visual Studio Code.
@@ -109,14 +144,14 @@ it reports that setup finished or displays an error.
 
 ## Create an R project
 
-1. Open **R Sandbox** from Applications.
-2. A Terminal window opens and downloads the current setup files.
+1. Open **R Sandbox** on macOS, or double-click `R-Sandbox.exe` on Windows.
+2. A console window opens and downloads the current setup files.
 3. Enter an R version in `major.minor` or `major.minor.patch` form, such as
    `4.5` or `4.5.1`. The latest available Rocker patch for that major/minor
    series is selected.
 4. Enter `codex` or `claude` to select the coding agent.
-5. Enter the directory for the project, or press Return to use
-   `~/Desktop/r-sandbox-project`. A missing directory is created.
+5. Enter the directory for the project, or press Return to use the displayed
+   default project directory. A missing directory is created.
 6. Wait while the application prepares the repository, builds the R environment,
    configures SSH, installs the VS Code extensions, and opens the project.
 
@@ -125,11 +160,11 @@ build tools and language-server dependencies.
 
 ## Create a bioinformatics project
 
-1. Open **Bioinformatics Sandbox** from Applications.
-2. A Terminal window opens and downloads the current setup files.
+1. Open **Bioinformatics Sandbox** on macOS, or double-click `Bioinformatics-Sandbox.exe` on Windows.
+2. A console window opens and downloads the current setup files.
 3. Enter `codex` or `claude` to select the coding agent.
-4. Enter the directory for the project, or press Return to use
-   `~/Desktop/bioinformatics-sandbox-project`. A missing directory is created.
+4. Enter the directory for the project, or press Return to use the displayed
+   default project directory. A missing directory is created.
 5. Wait while the application prepares the repository, creates or reconnects to
    the sandbox, configures SSH, installs the scientific VS Code extensions, and
    opens the project.
@@ -152,7 +187,7 @@ project/
 ```
 
 The project is mounted directly into the sandbox, so edits made in VS Code are
-saved on your Mac. The Python virtual environment is stored as `.venv/` in the
+saved on your computer. The Python virtual environment is stored as `.venv/` in the
 project and is configured as VS Code's interpreter.
 
 R projects additionally contain `.r-library/`, which is their project-local R
@@ -195,8 +230,8 @@ Use `claude` instead of `codex` when appropriate.
 
 - Put source files and notebooks in `code/`.
 - Put datasets in `data/`.
-- Install Python packages into the project `.venv`, not into macOS.
-- Install R packages into the project `.r-library/` with `renv`, not into macOS.
+- Install Python packages into the project `.venv`, not into the host OS.
+- Install R packages into the project `.r-library/` with `renv`, not into the host OS.
 - Build and run specialized workload containers only inside Bioinformatics Sandbox.
 - Keep dependency declarations and lock files under version control.
 - Use the integrated VS Code terminal after the Remote-SSH window opens; commands
@@ -215,12 +250,11 @@ this repository's GitHub Release.
 
 Install Git, reopen Terminal, and verify that `git --version` works.
 
-### `Docker CLI is required` or `sbx is not installed`
+### `sbx is not installed`
 
-Install or update the missing component, start the Docker engine, and verify:
+Install or update Docker Sandboxes and verify:
 
 ```bash
-docker version
 sbx version
 sbx login
 ```
@@ -228,9 +262,16 @@ sbx login
 The sandbox apps require Docker Sandboxes CLI 0.39.0 or newer and an authenticated
 Docker Sandboxes session.
 
+### `Docker CLI is required`
+
+Python Sandbox and R Sandbox require a running Docker engine in addition to
+Docker Sandboxes. Confirm that Docker Desktop supports your operating-system
+edition and version, start it, and run `docker version`. Bioinformatics Sandbox
+does not require Docker Desktop.
+
 ### Visual Studio Code is not found
 
-Install Visual Studio Code in `/Applications` and run the sandbox app again.
+Install Visual Studio Code for your operating system and run the sandbox app again.
 
 ### Setup stops while making the Git commit
 

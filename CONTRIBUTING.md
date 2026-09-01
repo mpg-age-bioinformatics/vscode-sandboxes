@@ -87,6 +87,36 @@ bash -n \
   bioinformatics-sandbox/scripts/build-macos-dmg.sh
 ```
 
+### Windows executables
+
+Windows launchers are native x86-64 console applications built with Go. Install
+the pinned resource tool once:
+
+```bash
+go install github.com/tc-hib/go-winres@v0.3.3
+```
+
+Build test artifacts from the repository root:
+
+```bash
+./python-sandbox/scripts/build-windows-exe.sh /tmp/Python-Sandbox.exe
+./r-sandbox/scripts/build-windows-exe.sh /tmp/R-Sandbox.exe
+./bioinformatics-sandbox/scripts/build-windows-exe.sh \
+  /tmp/Bioinformatics-Sandbox.exe
+file /tmp/Python-Sandbox.exe /tmp/R-Sandbox.exe \
+  /tmp/Bioinformatics-Sandbox.exe
+```
+
+The committed `windows/rsrc_windows_amd64.syso` files contain each executable's
+icon, manifest, and version information. Regenerate them with the build scripts
+whenever an icon or Windows metadata changes.
+
+Test every executable on a clean, supported 64-bit Windows 11 system. Verify the
+unsupported-Windows and disabled-hypervisor failures, prerequisite diagnostics,
+interactive prompts, Git clone, project setup, sandbox connection, extension
+installation, and VS Code opening. Python and R tests require a working Docker
+engine; Bioinformatics Sandbox must work with `sbx` without Docker Desktop.
+
 Then mount the DMG and verify that:
 
 - the Finder window contains the application and an `Applications` shortcut;
@@ -112,6 +142,7 @@ git tag -a python-sandbox-v1.0.0 -m "Python Sandbox 1.0.0"
 git push origin python-sandbox-v1.0.0
 gh release create python-sandbox-v1.0.0 \
   python-sandbox/assets/Python-Sandbox.dmg \
+  python-sandbox/assets/Python-Sandbox.exe \
   --title "Python Sandbox 1.0.0" \
   --generate-notes
 ```
@@ -123,6 +154,7 @@ git tag -a r-sandbox-v1.0.0 -m "R Sandbox 1.0.0"
 git push origin r-sandbox-v1.0.0
 gh release create r-sandbox-v1.0.0 \
   r-sandbox/assets/R-Sandbox.dmg \
+  r-sandbox/assets/R-Sandbox.exe \
   --title "R Sandbox 1.0.0" \
   --generate-notes
 ```
@@ -134,14 +166,15 @@ git tag -a bioinformatics-sandbox-v1.0.0 -m "Bioinformatics Sandbox 1.0.0"
 git push origin bioinformatics-sandbox-v1.0.0
 gh release create bioinformatics-sandbox-v1.0.0 \
   bioinformatics-sandbox/assets/Bioinformatics-Sandbox.dmg \
+  bioinformatics-sandbox/assets/Bioinformatics-Sandbox.exe \
   --title "Bioinformatics Sandbox 1.0.0" \
   --generate-notes
 ```
 
-Before publishing, confirm that the DMG in `assets/` is the same build that was
-tested. The GitHub Release page—not a link to the `.app` directory in the source
-tree—should be given to users. Users download the DMG, open it, and drag the app
-to the provided `Applications` shortcut.
+Before publishing, confirm that the DMG and EXE files in `assets/` are the same
+builds that were tested. Give users the GitHub Release page—not a link to the
+`.app` directory in the source tree. macOS users install through the DMG; Windows
+users download the matching EXE directly.
 
 For another sandbox, replace the directory, tag, title, and artifact filename
 with that sandbox's values. Publish one GitHub Release per sandbox version.
