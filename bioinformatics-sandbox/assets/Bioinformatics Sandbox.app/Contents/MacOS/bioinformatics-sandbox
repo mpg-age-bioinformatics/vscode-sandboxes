@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+bundle_root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
+launcher="$bundle_root/Contents/Resources/Bioinformatics Sandbox.command"
+[[ -x "$launcher" ]] || {
+  osascript -e 'display alert "Bioinformatics Sandbox" message "The application launcher is missing." as critical'
+  exit 1
+}
+
+open -a Terminal "$launcher"
