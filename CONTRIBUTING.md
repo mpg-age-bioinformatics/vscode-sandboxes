@@ -47,6 +47,25 @@ developer-specific paths, or temporary build directories.
 Run packaging commands from the repository root. Write test builds outside the
 repository so an existing release artifact is not overwritten accidentally.
 
+To build, verify, and update one stable artifact in `assets/`, use:
+
+```bash
+./scripts/create-release.sh <sandbox> <platform>
+```
+
+The sandbox may be `python`, `r`, or `bioinformatics`; the platform may be
+`macos` or `windows`. For example:
+
+```bash
+./scripts/create-release.sh python macos
+./scripts/create-release.sh bioinformatics windows
+```
+
+The helper builds in a temporary directory and replaces the selected stable
+artifact only after verification succeeds. It does not create a Git tag or
+publish a GitHub Release; follow the publishing section below after testing and
+merging the artifact.
+
 For the Python sandbox:
 
 ```bash
@@ -192,4 +211,3 @@ users download the matching EXE directly.
 
 For another sandbox, replace the directory, tag, title, and artifact filename
 with that sandbox's values. Publish one GitHub Release per sandbox version.
-

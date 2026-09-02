@@ -62,11 +62,6 @@ git config --global user.email "you@example.com"
 4. Drag **Python Sandbox** onto the **Applications** shortcut.
 5. Eject the Python Sandbox disk image.
 
-The application is currently unsigned. On its first launch, macOS may prevent it
-from opening. In Finder, open **Applications**, Control-click **Python Sandbox**,
-choose **Open**, and confirm **Open**. This exception is normally required only
-once. Do not bypass this warning for a copy obtained from an untrusted source.
-
 ## Install R Sandbox
 
 1. Open the latest R Sandbox release on this repository's GitHub **Releases**
@@ -75,10 +70,6 @@ once. Do not bypass this warning for a copy obtained from an untrusted source.
 3. Double-click the downloaded DMG.
 4. Drag **R Sandbox** onto the **Applications** shortcut.
 5. Eject the R Sandbox disk image.
-
-R Sandbox is also currently unsigned. If macOS blocks its first launch,
-Control-click **R Sandbox** in Applications, choose **Open**, and confirm
-**Open**.
 
 ## Install Bioinformatics Sandbox
 
@@ -89,8 +80,25 @@ Control-click **R Sandbox** in Applications, choose **Open**, and confirm
 4. Drag **Bioinformatics Sandbox** onto the **Applications** shortcut.
 5. Eject the Bioinformatics Sandbox disk image.
 
-The app is currently unsigned. If macOS blocks its first launch, Control-click
-**Bioinformatics Sandbox** in Applications, choose **Open**, and confirm **Open**.
+### Open an unsigned sandbox app
+
+The macOS applications are currently unsigned and not notarized. On first
+launch, macOS may show a warning with only **Move to Trash** and **Done**. For an
+app downloaded from this repository's GitHub Release:
+
+1. Click **Done**. Do not move the app to Trash.
+2. Open **System Settings** → **Privacy & Security**.
+3. Scroll down to **Security** and find the message that the sandbox app was
+   blocked.
+4. Click **Open Anyway**. This button is normally available for about one hour
+   after the blocked launch attempt.
+5. Authenticate when prompted, then confirm **Open** in the new warning dialog.
+
+macOS records an exception, so this is normally required only once per app. If
+**Open Anyway** is absent, try to open the app once more and immediately return
+to **Privacy & Security**. Do not override the warning if the app came from an
+untrusted source or macOS explicitly reports detected malware; download a fresh
+copy from the repository's GitHub Release and verify its checksum instead.
 
 ## Install on Windows
 
@@ -240,8 +248,10 @@ Use `claude` instead of `codex` when the project was configured for Claude Code.
 
 ### The app cannot be opened
 
-Use Control-click → **Open** for the first launch. Confirm that the app came from
-this repository's GitHub Release.
+If the warning offers only **Move to Trash** and **Done**, click **Done**, then
+use **System Settings** → **Privacy & Security** → **Security** → **Open Anyway**.
+Confirm that the app came from this repository's GitHub Release before
+overriding Gatekeeper.
 
 ### `Git is required`
 
