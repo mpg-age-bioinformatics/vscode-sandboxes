@@ -3,9 +3,37 @@ set -euo pipefail
 
 bundle_root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 launcher="$bundle_root/Contents/Resources/Bioinformatics Sandbox.command"
-[[ -x "$launcher" ]] || {
+form="$bundle_root/Contents/Resources/Setup Form.js"
+[[ -x "$launcher" && -f "$form" ]] || {
   osascript -e 'display alert "Bioinformatics Sandbox" message "The application launcher is missing." as critical'
   exit 1
 }
 
-open -a Terminal "$launcher"
+selection_dir="$(mktemp -d "${TMPDIR:-/tmp}/bioinformatics-sandbox-selection.XXXXXX")"
+if ! form_output="$(osascript -l JavaScript "$form" "Bioinformatics Sandbox" "$HOME/Desktop/bioinformatics-sandbox-project" "$selection_dir" 2>&1)"; then
+  rm -rf -- "$selection_dir"
+  osascript -e 'on run argv' -e 'display alert "Bioinformatics Sandbox" message (item 1 of argv) as critical' -e 'end run' "$form_output"
+  exit 1
+fi
+[[ -f "$selection_dir/agent" && -f "$selection_dir/project" ]] || {
+  rm -rf -- "$selection_dir"
+  exit 0
+}
+agent="$(< "$selection_dir/agent")"
+project_dir="$(< "$selection_dir/project")"
+rm -rf -- "$selection_dir"
+[[ -n "$agent" && -n "$project_dir" ]] || {
+  osascript -e 'display alert "Bioinformatics Sandbox" message "Agent and project folder are required." as critical'
+  exit 1
+}
+command_line="$(printf '%q ' "$launcher" "$agent" "$project_dir")"
+handoff_dir="$(mktemp -d "${TMPDIR:-/tmp}/bioinformatics-sandbox-app.XXXXXX")"
+handoff="$handoff_dir/Run Bioinformatics Sandbox.command"
+quoted_handoff_dir="$(printf '%q' "$handoff_dir")"
+printf '#!/usr/bin/env bash\ntrap '\''rm -rf -- %s'\'' EXIT\n%s\n' "$quoted_handoff_dir" "$command_line" > "$handoff"
+chmod +x "$handoff"
+if ! open -a Terminal "$handoff"; then
+  rm -rf -- "$handoff_dir"
+  osascript -e 'display alert "Bioinformatics Sandbox" message "Terminal could not be opened to run the setup." as critical'
+  exit 1
+fi

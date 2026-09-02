@@ -111,6 +111,20 @@ The committed `windows/rsrc_windows_amd64.syso` files contain each executable's
 icon, manifest, and version information. Regenerate them with the build scripts
 whenever an icon or Windows metadata changes.
 
+The initial Windows launchers must also verify that setup created the matching
+`code/Run <Sandbox>.exe`. Those project runners are maintained in the corresponding
+`skills/<sandbox>/assets/windows-project-runner/` directory and built with:
+
+```bash
+python-sandbox/scripts/build-windows-project-runners.sh
+r-sandbox/scripts/build-windows-project-runners.sh
+bioinformatics-sandbox/scripts/build-windows-project-runners.sh
+```
+
+Run those commands from the skills repository. Test both the Codex and Claude
+runner variants. A clean generated project must contain the stable user-facing
+filename, track it in Git, and reopen the existing sandbox without rerunning setup.
+
 Test every executable on a clean, supported 64-bit Windows 11 system. Verify the
 unsupported-Windows and disabled-hypervisor failures, prerequisite diagnostics,
 interactive prompts, Git clone, project setup, sandbox connection, extension
