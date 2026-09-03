@@ -6,6 +6,29 @@ with Docker Sandboxes and open them in Visual Studio Code.
 Each sandbox keeps project files on your computer while running the development tools,
 language runtime, and selected coding agent in an isolated sandbox.
 
+## Contents
+
+- [Available sandboxes](#available-sandboxes)
+  - [Python Sandbox](#python-sandbox)
+  - [R Sandbox](#r-sandbox)
+  - [Bioinformatics Sandbox](#bioinformatics-sandbox)
+- [macOS](#macos)
+  - [macOS requirements](#macos-requirements)
+  - [Install the macOS applications](#install-the-macos-applications)
+  - [Open an unsigned sandbox app](#open-an-unsigned-sandbox-app)
+  - [Create projects on macOS](#create-projects-on-macos)
+- [Windows](#windows)
+  - [Windows requirements](#windows-requirements)
+  - [Download the Windows executables](#download-the-windows-executables)
+  - [Unblock a downloaded executable](#unblock-a-downloaded-executable)
+  - [Create projects on Windows](#create-projects-on-windows)
+- [Using the generated project](#using-the-generated-project)
+  - [What is created](#what-is-created)
+  - [Open the project again](#open-the-project-again)
+  - [Working in the sandbox](#working-in-the-sandbox)
+- [Troubleshooting](#troubleshooting)
+- [For developers](#for-developers)
+
 ## Available sandboxes
 
 ### Python Sandbox
@@ -26,7 +49,9 @@ Bioinformatics Sandbox creates a language-neutral scientific project for mixed P
 R, notebooks, command-line tools, and containerized workloads. It provides the
 code/data layout, VS Code tooling, and either Codex or Claude Code.
 
-## Before you install on macOS
+## macOS
+
+### macOS requirements
 
 Docker Sandboxes currently requires an Apple silicon Mac running macOS Sonoma
 14 or newer. Install and configure:
@@ -58,7 +83,9 @@ git config --global user.name "Your Name"
 git config --global user.email "you@example.com"
 ```
 
-## Install Python Sandbox
+### Install the macOS applications
+
+#### Python Sandbox
 
 1. Open the latest Python Sandbox release on the
    [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
@@ -68,7 +95,7 @@ git config --global user.email "you@example.com"
 4. Drag **Python Sandbox** onto the **Applications** shortcut.
 5. Eject the Python Sandbox disk image.
 
-## Install R Sandbox
+#### R Sandbox
 
 1. Open the latest R Sandbox release on the
    [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
@@ -78,7 +105,7 @@ git config --global user.email "you@example.com"
 4. Drag **R Sandbox** onto the **Applications** shortcut.
 5. Eject the R Sandbox disk image.
 
-## Install Bioinformatics Sandbox
+#### Bioinformatics Sandbox
 
 1. Open the latest Bioinformatics Sandbox release on the
    [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
@@ -112,7 +139,54 @@ copy from the
 [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
 page and verify its checksum instead.
 
-## Install on Windows
+### Create projects on macOS
+
+#### Create a Python project on macOS
+
+1. Open **Python Sandbox** from Applications.
+2. Review the prefilled Python version, coding agent, and project folder in the
+   setup form, then choose **Setup**.
+3. Use a Python version in `major.minor` or `major.minor.patch` form, such as
+   `3.13` or `3.13.2`. The sandbox uses the corresponding major/minor series.
+4. The project folder is created if it does not exist.
+5. Keep the Terminal window open while the application prepares the repository,
+   builds the sandbox, configures SSH, installs the VS Code extensions, and
+   opens the project in Visual Studio Code.
+
+The initial build can take several minutes.
+
+#### Create an R project on macOS
+
+1. Open **R Sandbox** from Applications.
+2. Review the prefilled R version, coding agent, and project folder in the setup
+   form, then choose **Setup**.
+3. Use an R version in `major.minor` or `major.minor.patch` form, such as `4.5`
+   or `4.5.1`. The latest available Rocker patch for that major/minor series is
+   selected.
+4. The project folder is created if it does not exist.
+5. Keep the Terminal window open while the application prepares the repository,
+   builds the R environment, configures SSH, installs the VS Code extensions,
+   and opens the project.
+
+The initial R image build can take several minutes because it includes R package
+build tools and language-server dependencies.
+
+#### Create a bioinformatics project on macOS
+
+1. Open **Bioinformatics Sandbox** from Applications.
+2. Review the prefilled coding agent and project folder in the setup form, then
+   choose **Setup**.
+3. The project folder is created if it does not exist.
+4. Keep the Terminal window open while the application prepares the repository,
+   creates or reconnects to the sandbox, configures SSH, installs the scientific
+   VS Code extensions, and opens the project.
+
+Workload containers run on the Docker daemon inside the sandbox, not on the host
+Docker socket.
+
+## Windows
+
+### Windows requirements
 
 Windows executables are available only for 64-bit Intel/AMD Windows 11 systems
 with Windows Hypervisor Platform enabled. Windows 10, Windows Server, ARM64
@@ -144,6 +218,8 @@ the Docker engine reports that it is running.** If Docker Desktop is stopped—o
 is using Windows containers instead of Linux containers—the launcher cannot
 build the sandbox environment.
 
+### Download the Windows executables
+
 Download the appropriate file from the
 [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
 page:
@@ -151,6 +227,8 @@ page:
 - `Python-Sandbox.exe`;
 - `R-Sandbox.exe`; or
 - `Bioinformatics-Sandbox.exe`.
+
+### Unblock a downloaded executable
 
 The executables are currently unsigned. Windows SmartScreen may show an
 unrecognized-app warning. Run an executable only if it came from the
@@ -166,44 +244,47 @@ If Windows blocks the downloaded executable:
 3. Under **General → Security**, select **Unblock**.
 4. Select **Apply**, close Properties, and run the executable again.
 
-## Create a Python project
+### Create projects on Windows
 
-1. Open **Python Sandbox** on macOS, or double-click `Python-Sandbox.exe` on Windows.
+#### Create a Python project on Windows
+
+1. Double-click `Python-Sandbox.exe`.
 2. Review the prefilled Python version, coding agent, and project folder in the
-   setup form, then choose **Setup**. On Windows, **Browse** can select an
-   existing project folder; an edited path is created if it does not exist.
+   setup form, then choose **Setup**. **Browse** can select an existing project
+   folder; an edited path is created if it does not exist.
 3. Use a Python version in `major.minor` or `major.minor.patch` form, such as
    `3.13` or `3.13.2`. The sandbox uses the corresponding major/minor series.
 4. The project folder is created if it does not exist.
-5. Wait while the application prepares the repository, builds the sandbox,
+5. Keep the launcher window open while it prepares the repository, builds the sandbox,
    configures SSH, installs the VS Code extensions, and opens the project in
    Visual Studio Code.
 
-The initial build can take several minutes. Keep the Terminal window open until
+The initial build can take several minutes. Keep the launcher window open until
 it reports that setup finished or displays an error.
 
-## Create an R project
+#### Create an R project on Windows
 
-1. Open **R Sandbox** on macOS, or double-click `R-Sandbox.exe` on Windows.
+1. Double-click `R-Sandbox.exe`.
 2. Review the prefilled R version, coding agent, and project folder in the setup
-   form, then choose **Setup**. On Windows, **Browse** can select an existing
-   project folder; an edited path is created if it does not exist.
+   form, then choose **Setup**. **Browse** can select an existing project folder;
+   an edited path is created if it does not exist.
 3. Use an R version in `major.minor` or `major.minor.patch` form, such as
    `4.5` or `4.5.1`. The latest available Rocker patch for that major/minor
    series is selected.
 4. The project folder is created if it does not exist.
-5. Wait while the application prepares the repository, builds the R environment,
-   configures SSH, installs the VS Code extensions, and opens the project.
+5. Keep the launcher window open while it prepares the repository, builds the R
+   environment, configures SSH, installs the VS Code extensions, and opens the
+   project.
 
 The initial R image build may take several minutes because it includes R package
 build tools and language-server dependencies.
 
-## Create a bioinformatics project
+#### Create a bioinformatics project on Windows
 
-1. Open **Bioinformatics Sandbox** on macOS, or double-click `Bioinformatics-Sandbox.exe` on Windows.
+1. Double-click `Bioinformatics-Sandbox.exe`.
 2. Review the prefilled coding agent and project folder in the setup form, then
-   choose **Setup**. On Windows, **Browse** can select an existing project
-   folder; an edited path is created if it does not exist.
+   choose **Setup**. **Browse** can select an existing project folder; an edited
+   path is created if it does not exist.
 3. The project folder is created if it does not exist.
 4. Wait while the application prepares the repository, creates or reconnects to
    the sandbox, configures SSH, installs the scientific VS Code extensions, and
@@ -212,7 +293,12 @@ build tools and language-server dependencies.
 Workload containers run on the Docker daemon inside the sandbox, not on the host
 Docker socket.
 
-## What is created
+## Using the generated project
+
+The following sections apply after either the macOS or Windows setup opens the
+project in a VS Code Remote-SSH window.
+
+### What is created
 
 The selected project directory contains:
 
@@ -237,7 +323,7 @@ project and is configured as VS Code's interpreter.
 R projects additionally contain `.r-library/`, which is their project-local R
 package library. Manage its dependencies with `renv`.
 
-## Open the project again
+### Open the project again
 
 After the first setup, do not run the installer again on Windows. Open the
 project's `code` folder and double-click the generated runner:
@@ -263,7 +349,7 @@ The command-line equivalents, run from the project root, are:
 
 Use `claude` instead of `codex` when the project was configured for Claude Code.
 
-## Working in the sandbox
+### Working in the sandbox
 
 - Put source files and notebooks in `code/`.
 - Put datasets in `data/`.
