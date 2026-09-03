@@ -118,13 +118,22 @@ go install github.com/tc-hib/go-winres@v0.3.3
 Build test artifacts from the repository root:
 
 ```bash
-./python-sandbox/scripts/build-windows-exe.sh /tmp/Python-Sandbox.exe
-./r-sandbox/scripts/build-windows-exe.sh /tmp/R-Sandbox.exe
-./bioinformatics-sandbox/scripts/build-windows-exe.sh \
+SKILLS_REF=<full-published-skills-commit> \
+  ./python-sandbox/scripts/build-windows-exe.sh /tmp/Python-Sandbox.exe
+SKILLS_REF=<full-published-skills-commit> \
+  ./r-sandbox/scripts/build-windows-exe.sh /tmp/R-Sandbox.exe
+SKILLS_REF=<full-published-skills-commit> \
+  ./bioinformatics-sandbox/scripts/build-windows-exe.sh \
   /tmp/Bioinformatics-Sandbox.exe
 file /tmp/Python-Sandbox.exe /tmp/R-Sandbox.exe \
   /tmp/Bioinformatics-Sandbox.exe
 ```
+
+`SKILLS_REF` must be the complete 40-character commit ID already available from
+the public skills repository. This pins the executable to the exact setup code
+that was tested. `scripts/create-release.sh` resolves the public repository's
+current `HEAD` automatically; set `SKILLS_REF` explicitly to reproduce an older
+release or to coordinate a release against a specific published skills commit.
 
 The committed `windows/rsrc_windows_amd64.syso` files contain each executable's
 icon, manifest, and version information. Regenerate them with the build scripts

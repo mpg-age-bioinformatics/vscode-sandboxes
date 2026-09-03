@@ -119,6 +119,11 @@ Install these prerequisites first:
   Windows edition and build supported by
   [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/).
 
+Use a project folder on a local Windows drive. Network shares and WSL UNC paths
+are rejected because they do not provide the local filesystem behavior required
+by mounted sandbox workspaces. Python Sandbox and R Sandbox require Docker
+Desktop to be running Linux containers.
+
 Bioinformatics Sandbox does not require Docker Desktop; workload containers use
 the private Docker daemon supplied inside Docker Sandboxes.
 

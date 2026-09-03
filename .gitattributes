@@ -1,0 +1,11 @@
+* text=auto
+*.sh text eol=lf
+*.command text eol=lf
+*.applescript text eol=lf
+*.go text eol=lf
+*.js text eol=lf
+*.exe binary
+*.dmg binary
+*.icns binary
+*.png binary
+*.syso binary
