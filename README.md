@@ -90,7 +90,7 @@ git config --global user.email "you@example.com"
 1. Open the latest Python Sandbox release on the
    [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
    page.
-2. Download `Python-Sandbox.dmg`.
+2. Under **Assets**, download `Python-Sandbox.dmg`.
 3. Double-click the downloaded DMG.
 4. Drag **Python Sandbox** onto the **Applications** shortcut.
 5. Eject the Python Sandbox disk image.
@@ -100,7 +100,7 @@ git config --global user.email "you@example.com"
 1. Open the latest R Sandbox release on the
    [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
    page.
-2. Download `R-Sandbox.dmg`.
+2. Under **Assets**, download `R-Sandbox.dmg`.
 3. Double-click the downloaded DMG.
 4. Drag **R Sandbox** onto the **Applications** shortcut.
 5. Eject the R Sandbox disk image.
@@ -110,7 +110,7 @@ git config --global user.email "you@example.com"
 1. Open the latest Bioinformatics Sandbox release on the
    [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
    page.
-2. Download `Bioinformatics-Sandbox.dmg`.
+2. Under **Assets**, download `Bioinformatics-Sandbox.dmg`.
 3. Double-click the downloaded DMG.
 4. Drag **Bioinformatics Sandbox** onto the **Applications** shortcut.
 5. Eject the Bioinformatics Sandbox disk image.
@@ -137,7 +137,7 @@ to **Privacy & Security**. Do not override the warning if the app came from an
 untrusted source or macOS explicitly reports detected malware; download a fresh
 copy from the
 [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
-page and verify its checksum instead.
+page under **Assets** and verify its checksum instead.
 
 ### Create projects on macOS
 
@@ -220,9 +220,9 @@ build the sandbox environment.
 
 ### Download the Windows executables
 
-Download the appropriate file from the
+Open the appropriate release on the
 [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
-page:
+page. Under **Assets**, download the appropriate file:
 
 - `Python-Sandbox.exe`;
 - `R-Sandbox.exe`; or
