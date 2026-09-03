@@ -139,6 +139,13 @@ GitHub Release. The launcher checks compatibility and prerequisites before creat
 or modifying a project; it does not install Docker, enable Windows features, or
 request administrator privileges.
 
+If Windows blocks the downloaded executable:
+
+1. Right-click the downloaded `.exe`.
+2. Select **Properties**.
+3. Under **General → Security**, select **Unblock**.
+4. Select **Apply**, close Properties, and run the executable again.
+
 ## Create a Python project
 
 1. Open **Python Sandbox** on macOS, or double-click `Python-Sandbox.exe` on Windows.
