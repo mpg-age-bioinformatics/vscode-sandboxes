@@ -41,9 +41,14 @@ Docker Sandboxes currently requires an Apple silicon Mac running macOS Sonoma
   and
 - access to the coding agent you intend to use: Codex or Claude Code.
 
-Sign in once with `sbx login`. If you use Docker Desktop, start it before opening
-a sandbox app. The first setup also requires an internet connection to download
-the setup files, container images, and VS Code extensions.
+Sign in once with `sbx login`.
+
+**Before opening Python Sandbox or R Sandbox, start Docker Desktop and wait until
+the Docker engine reports that it is running.** This is required on both macOS
+and Windows. Bioinformatics Sandbox does not require the host Docker engine.
+
+The first setup also requires an internet connection to download the setup
+files, container images, and VS Code extensions.
 
 The setup initializes a Git repository and makes an initial commit. Configure your
 Git name and email first if you have not already done so:
@@ -126,6 +131,11 @@ Desktop to be running Linux containers.
 
 Bioinformatics Sandbox does not require Docker Desktop; workload containers use
 the private Docker daemon supplied inside Docker Sandboxes.
+
+**Before opening Python Sandbox or R Sandbox, start Docker Desktop and wait until
+the Docker engine reports that it is running.** If Docker Desktop is stopped—or
+is using Windows containers instead of Linux containers—the launcher cannot
+build the sandbox environment.
 
 Download the appropriate file from the GitHub Release:
 
