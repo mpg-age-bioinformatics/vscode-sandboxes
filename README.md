@@ -60,7 +60,8 @@ git config --global user.email "you@example.com"
 
 ## Install Python Sandbox
 
-1. Open the latest Python Sandbox release on this repository's GitHub **Releases**
+1. Open the latest Python Sandbox release on the
+   [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
    page.
 2. Download `Python-Sandbox.dmg`.
 3. Double-click the downloaded DMG.
@@ -69,7 +70,8 @@ git config --global user.email "you@example.com"
 
 ## Install R Sandbox
 
-1. Open the latest R Sandbox release on this repository's GitHub **Releases**
+1. Open the latest R Sandbox release on the
+   [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
    page.
 2. Download `R-Sandbox.dmg`.
 3. Double-click the downloaded DMG.
@@ -78,8 +80,9 @@ git config --global user.email "you@example.com"
 
 ## Install Bioinformatics Sandbox
 
-1. Open the latest Bioinformatics Sandbox release on this repository's GitHub
-   **Releases** page.
+1. Open the latest Bioinformatics Sandbox release on the
+   [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
+   page.
 2. Download `Bioinformatics-Sandbox.dmg`.
 3. Double-click the downloaded DMG.
 4. Drag **Bioinformatics Sandbox** onto the **Applications** shortcut.
@@ -89,7 +92,9 @@ git config --global user.email "you@example.com"
 
 The macOS applications are currently unsigned and not notarized. On first
 launch, macOS may show a warning with only **Move to Trash** and **Done**. For an
-app downloaded from this repository's GitHub Release:
+app downloaded from the
+[GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
+page:
 
 1. Click **Done**. Do not move the app to Trash.
 2. Open **System Settings** → **Privacy & Security**.
@@ -103,7 +108,9 @@ macOS records an exception, so this is normally required only once per app. If
 **Open Anyway** is absent, try to open the app once more and immediately return
 to **Privacy & Security**. Do not override the warning if the app came from an
 untrusted source or macOS explicitly reports detected malware; download a fresh
-copy from the repository's GitHub Release and verify its checksum instead.
+copy from the
+[GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
+page and verify its checksum instead.
 
 ## Install on Windows
 
@@ -137,15 +144,18 @@ the Docker engine reports that it is running.** If Docker Desktop is stopped—o
 is using Windows containers instead of Linux containers—the launcher cannot
 build the sandbox environment.
 
-Download the appropriate file from the GitHub Release:
+Download the appropriate file from the
+[GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
+page:
 
 - `Python-Sandbox.exe`;
 - `R-Sandbox.exe`; or
 - `Bioinformatics-Sandbox.exe`.
 
 The executables are currently unsigned. Windows SmartScreen may show an
-unrecognized-app warning. Run an executable only if it came from this repository's
-GitHub Release. The launcher checks compatibility and prerequisites before creating
+unrecognized-app warning. Run an executable only if it came from the
+[GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
+page. The launcher checks compatibility and prerequisites before creating
 or modifying a project; it does not install Docker, enable Windows features, or
 request administrator privileges.
 
@@ -272,7 +282,9 @@ Use `claude` instead of `codex` when the project was configured for Claude Code.
 
 If the warning offers only **Move to Trash** and **Done**, click **Done**, then
 use **System Settings** → **Privacy & Security** → **Security** → **Open Anyway**.
-Confirm that the app came from this repository's GitHub Release before
+Confirm that the app came from the
+[GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
+page before
 overriding Gatekeeper.
 
 ### `Git is required`
