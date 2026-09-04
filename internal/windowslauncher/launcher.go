@@ -104,8 +104,11 @@ func checkDependencies(needsDocker bool) (dependencies, error) {
 	if err := checkSBXVersion(sbx); err != nil {
 		return dependencies{}, err
 	}
+	if err := runVisible(sbx, "setup", "ssh"); err != nil {
+		return dependencies{}, fmt.Errorf("configure Docker Sandboxes SSH access: %w", err)
+	}
 	if err := runVisible(sbx, "diagnose"); err != nil {
-		return dependencies{}, fmt.Errorf("Docker Sandboxes diagnostics failed; confirm virtualization is enabled and run 'sbx login': %w", err)
+		return dependencies{}, fmt.Errorf("Docker Sandboxes diagnostics failed after SSH setup; confirm virtualization is enabled and run 'sbx login': %w", err)
 	}
 	if needsDocker {
 		docker, err := requireCommand("docker.exe", "This sandbox requires Docker Desktop running Linux containers. Install Docker Desktop and start it.")
