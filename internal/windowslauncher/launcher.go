@@ -97,6 +97,10 @@ func checkDependencies(needsDocker bool) (dependencies, error) {
 	if err != nil {
 		return dependencies{}, err
 	}
+	ssh = preferredWindowsSSHPath(ssh)
+	if err := os.Setenv("PATH", filepath.Dir(ssh)+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
+		return dependencies{}, fmt.Errorf("prioritize Windows OpenSSH: %w", err)
+	}
 	sbx, err := requireCommand("sbx.exe", "Install Docker Sandboxes with: winget install -h Docker.sbx")
 	if err != nil {
 		return dependencies{}, err
@@ -129,13 +133,7 @@ func checkDependencies(needsDocker bool) (dependencies, error) {
 }
 
 func configureVSCodeSSHPath(discoveredSSH string) error {
-	sshPath := discoveredSSH
-	if windowsDirectory := os.Getenv("WINDIR"); windowsDirectory != "" {
-		windowsSSH := filepath.Join(windowsDirectory, "System32", "OpenSSH", "ssh.exe")
-		if info, err := os.Stat(windowsSSH); err == nil && !info.IsDir() {
-			sshPath = windowsSSH
-		}
-	}
+	sshPath := preferredWindowsSSHPath(discoveredSSH)
 	appData := os.Getenv("APPDATA")
 	if appData == "" {
 		return errors.New("APPDATA is unavailable; cannot configure VS Code to use Windows OpenSSH")
@@ -149,6 +147,16 @@ func configureVSCodeSSHPath(discoveredSSH string) error {
 		fmt.Println("Configured VS Code to use Windows OpenSSH:", sshPath)
 	}
 	return nil
+}
+
+func preferredWindowsSSHPath(discoveredSSH string) string {
+	if windowsDirectory := os.Getenv("WINDIR"); windowsDirectory != "" {
+		windowsSSH := filepath.Join(windowsDirectory, "System32", "OpenSSH", "ssh.exe")
+		if info, err := os.Stat(windowsSSH); err == nil && !info.IsDir() {
+			return windowsSSH
+		}
+	}
+	return discoveredSSH
 }
 
 func ensureJSONCStringSetting(path, key, value string) (bool, error) {
