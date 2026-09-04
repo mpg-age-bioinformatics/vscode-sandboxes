@@ -44,6 +44,22 @@ require_command ssh "Install or restore the macOS OpenSSH client and reopen the 
 require_command code "Install Visual Studio Code from https://code.visualstudio.com/docs/setup/mac and enable its shell command."
 require_command sbx "Install Docker Sandboxes from https://docs.docker.com/ai/sandboxes/install/."
 
+ensure_sbx_daemon() {
+  sbx daemon status >/dev/null 2>&1 && return 0
+  echo "Starting the Docker Sandboxes daemon in the background..."
+  sbx daemon start --detach || {
+    echo "Error: could not start the Docker Sandboxes daemon." >&2
+    return 1
+  }
+  local attempt
+  for attempt in {1..15}; do
+    sbx daemon status >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  echo "Error: the Docker Sandboxes daemon did not become ready within 15 seconds." >&2
+  return 1
+}
+
 sbx_version="$(sbx version 2>&1)" || {
   echo "Error: Docker Sandboxes is installed but 'sbx version' failed: $sbx_version" >&2
   exit 1
@@ -53,6 +69,7 @@ if [[ ! "$sbx_version" =~ (Client[[:space:]]Version:|sbx[[:space:]]version:)[[:s
   echo "Error: Docker Sandboxes 0.39.0 or newer is required. Detected: $sbx_version" >&2
   exit 1
 fi
+ensure_sbx_daemon || exit 1
 if ! sbx diagnose; then
   echo "Error: Docker Sandboxes diagnostics failed. Confirm virtualization is available and run 'sbx login'." >&2
   exit 1
