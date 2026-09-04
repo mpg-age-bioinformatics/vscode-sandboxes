@@ -14,11 +14,13 @@ language runtime, and selected coding agent in an isolated sandbox.
   - [Bioinformatics Sandbox](#bioinformatics-sandbox)
 - [macOS](#macos)
   - [macOS requirements](#macos-requirements)
+  - [Verify macOS requirements before downloading](#verify-macos-requirements-before-downloading)
   - [Install the macOS applications](#install-the-macos-applications)
   - [Open an unsigned sandbox app](#open-an-unsigned-sandbox-app)
   - [Create projects on macOS](#create-projects-on-macos)
 - [Windows](#windows)
   - [Windows requirements](#windows-requirements)
+  - [Verify Windows requirements before downloading](#verify-windows-requirements-before-downloading)
   - [Download the Windows executables](#download-the-windows-executables)
   - [Unblock a downloaded executable](#unblock-a-downloaded-executable)
   - [Create projects on Windows](#create-projects-on-windows)
@@ -82,6 +84,40 @@ Git name and email first if you have not already done so:
 git config --global user.name "Your Name"
 git config --global user.email "you@example.com"
 ```
+
+### Verify macOS requirements before downloading
+
+Run these checks in Terminal before downloading a sandbox application:
+
+```bash
+uname -m
+sw_vers -productVersion
+git --version
+ssh -V
+code --version
+sbx version
+sbx login
+sbx setup ssh
+sbx diagnose
+git config --global --get user.name
+git config --global --get user.email
+```
+
+`uname -m` must report `arm64`, macOS must be Sonoma 14 or newer, `sbx` must be
+0.39.0 or newer, and `sbx diagnose` must finish without failed checks. The
+`sbx login` command is interactive; complete the sign-in before continuing.
+
+For Python Sandbox or R Sandbox, also start Docker Desktop and verify the host
+Docker engine:
+
+```bash
+docker version
+docker info --format '{{.OSType}}'
+```
+
+The final command must print `linux`. Bioinformatics Sandbox does not require
+these two Docker checks. If either Git identity command prints nothing, configure
+the missing value before running a launcher.
 
 ### Install the macOS applications
 
@@ -217,6 +253,48 @@ the private Docker daemon supplied inside Docker Sandboxes.
 the Docker engine reports that it is running.** If Docker Desktop is stopped—or
 is using Windows containers instead of Linux containers—the launcher cannot
 build the sandbox environment.
+
+### Verify Windows requirements before downloading
+
+Open PowerShell and run these checks before downloading a sandbox executable:
+
+```powershell
+[Environment]::Is64BitOperatingSystem
+Get-CimInstance Win32_OperatingSystem |
+  Select-Object Caption, Version, BuildNumber, OSArchitecture
+Get-ComputerInfo -Property HyperVisorPresent
+$env:Path = "$env:WINDIR\System32\OpenSSH;$env:Path"
+git.exe --version
+& "C:\Program Files\Git\bin\bash.exe" --version
+& "$env:WINDIR\System32\OpenSSH\ssh.exe" -V
+code.cmd --version
+sbx.exe version
+sbx.exe login
+sbx.exe setup ssh
+sbx.exe diagnose
+git.exe config --global --get user.name
+git.exe config --global --get user.email
+```
+
+The first command must print `True`, the operating-system details must show
+64-bit Windows 11 build 22000 or newer, `HyperVisorPresent` must be `True`, `sbx`
+must be 0.39.0 or newer, and `sbx diagnose` must finish without failed checks.
+Complete the interactive `sbx login` before running SSH setup and diagnostics.
+The temporary `PATH` update makes the checks use Windows OpenSSH rather than
+Git's bundled SSH client. If Git Bash was installed somewhere else, replace its
+path in the command above. If either Git identity command prints nothing,
+configure the missing value before running a launcher.
+
+For Python Sandbox or R Sandbox, start Docker Desktop in Linux-container mode
+and also run:
+
+```powershell
+docker.exe version
+docker.exe info --format '{{.OSType}}'
+```
+
+The final command must print `linux`. Bioinformatics Sandbox does not require
+these two Docker checks.
 
 ### Download the Windows executables
 
