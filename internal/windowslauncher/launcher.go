@@ -93,7 +93,8 @@ func checkDependencies(needsDocker bool) (dependencies, error) {
 	if err != nil {
 		return dependencies{}, err
 	}
-	if _, err := requireCommand("ssh.exe", "Install the Windows OpenSSH Client optional feature."); err != nil {
+	ssh, err := requireCommand("ssh.exe", "Install the Windows OpenSSH Client optional feature.")
+	if err != nil {
 		return dependencies{}, err
 	}
 	sbx, err := requireCommand("sbx.exe", "Install Docker Sandboxes with: winget install -h Docker.sbx")
@@ -118,7 +119,62 @@ func checkDependencies(needsDocker bool) (dependencies, error) {
 	if err := addVSCodeToPath(); err != nil {
 		return dependencies{}, err
 	}
+	if err := configureVSCodeSSHPath(ssh); err != nil {
+		return dependencies{}, err
+	}
 	return dependencies{git: git, bash: bash}, nil
+}
+
+func configureVSCodeSSHPath(discoveredSSH string) error {
+	sshPath := discoveredSSH
+	if windowsDirectory := os.Getenv("WINDIR"); windowsDirectory != "" {
+		windowsSSH := filepath.Join(windowsDirectory, "System32", "OpenSSH", "ssh.exe")
+		if info, err := os.Stat(windowsSSH); err == nil && !info.IsDir() {
+			sshPath = windowsSSH
+		}
+	}
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		return errors.New("APPDATA is unavailable; cannot configure VS Code to use Windows OpenSSH")
+	}
+	settingsPath := filepath.Join(appData, "Code", "User", "settings.json")
+	changed, err := ensureJSONCStringSetting(settingsPath, "remote.SSH.path", sshPath)
+	if err != nil {
+		return fmt.Errorf("configure VS Code Remote-SSH: %w", err)
+	}
+	if changed {
+		fmt.Println("Configured VS Code to use Windows OpenSSH:", sshPath)
+	}
+	return nil
+}
+
+func ensureJSONCStringSetting(path, key, value string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return false, err
+	}
+	if regexp.MustCompile(`(?m)^[\t ]*"` + regexp.QuoteMeta(key) + `"[\t ]*:`).Match(data) {
+		return false, nil
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		data = []byte("{}\n")
+	}
+	openingBrace := bytes.IndexByte(data, '{')
+	if openingBrace < 0 {
+		return false, fmt.Errorf("%s is not a JSON object", path)
+	}
+	insertion := []byte("\n  " + strconv.Quote(key) + ": " + strconv.Quote(value) + ",")
+	updated := make([]byte, 0, len(data)+len(insertion))
+	updated = append(updated, data[:openingBrace+1]...)
+	updated = append(updated, insertion...)
+	updated = append(updated, data[openingBrace+1:]...)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return false, err
+	}
+	if err := os.WriteFile(path, updated, 0644); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func run(config Config, deps dependencies, selection setupSelection) error {
