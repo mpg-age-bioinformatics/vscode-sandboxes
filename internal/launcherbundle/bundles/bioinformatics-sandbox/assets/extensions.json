@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "ms-vscode-remote.remote-ssh",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-toolsai.jupyter",
+    "REditorSupport.r",
+    "openai.chatgpt",
+    "anthropic.claude-code"
+  ]
+}

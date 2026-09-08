@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+finish() {
+  status=$?
+  trap - EXIT
+  if [[ -t 0 ]]; then
+    echo
+    if [[ $status -eq 0 ]]; then
+      echo "Python Sandbox started successfully."
+    else
+      echo "Python Sandbox stopped with an error (status $status)."
+    fi
+    read -r -p "Press Return to close this window..." _
+  fi
+  exit "$status"
+}
+trap finish EXIT
+
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+launcher="$script_dir/run-python-sandbox.sh"
+[[ -x "$launcher" ]] || {
+  echo "Error: sandbox launcher is unavailable: $launcher" >&2
+  exit 1
+}
+
+"$launcher" "__AGENT__"

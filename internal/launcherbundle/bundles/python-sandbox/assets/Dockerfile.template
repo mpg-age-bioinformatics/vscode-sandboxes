@@ -1,0 +1,14 @@
+ARG PYTHON_IMAGE=python:__PYTHON_VERSION__-bookworm
+ARG AGENT_TEMPLATE=__AGENT_TEMPLATE__
+FROM ${PYTHON_IMAGE} AS python_runtime
+
+FROM docker.io/docker/sandbox-templates:${AGENT_TEMPLATE}
+USER root
+COPY --from=python_runtime /usr/local/ /opt/python/
+ENV PATH="/opt/python/bin:${PATH}"
+# A copied venv interpreter retains Python's shared-library dependency but no
+# longer resides beside /opt/python/lib. Keep that runtime directory visible so
+# Windows-hosted workspaces can use venv --copies instead of Linux symlinks.
+ENV LD_LIBRARY_PATH="/opt/python/lib"
+USER agent
+RUN python --version && python -m venv --help >/dev/null

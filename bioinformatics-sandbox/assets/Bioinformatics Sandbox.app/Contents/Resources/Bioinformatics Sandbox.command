@@ -3,17 +3,10 @@ set -uo pipefail
 
 agent="${1:-}"
 project_dir="${2:-}"
-skills_repository="${BIOINFORMATICS_SANDBOX_SKILLS_REPOSITORY:-https://github.com/mpg-age-bioinformatics/skills.git}"
-skills_ref="${BIOINFORMATICS_SANDBOX_SKILLS_REF:-}"
-temporary_root="${TMPDIR:-/tmp}"
-download_root=""
 
 finish() {
   status=$?
   trap - EXIT
-  if [[ -n "$download_root" && -d "$download_root" ]]; then
-    rm -rf -- "$download_root"
-  fi
   if [[ -t 0 ]]; then
     echo
     if [[ $status -eq 0 ]]; then
@@ -44,8 +37,28 @@ require_command ssh "Install or restore the macOS OpenSSH client and reopen the 
 require_command code "Install Visual Studio Code from https://code.visualstudio.com/docs/setup/mac and enable its shell command."
 require_command sbx "Install Docker Sandboxes from https://docs.docker.com/ai/sandboxes/install/."
 
+asset_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+setup_dir="$asset_dir/Setup"
+if [[ ! -x "$setup_dir/scripts/setup-project.sh" ]]; then
+  repository_root="$(CDPATH= cd -- "$asset_dir/../../../../.." 2>/dev/null && pwd)" || repository_root=""
+  source_setup_dir="$repository_root/internal/launcherbundle/bundles/bioinformatics-sandbox"
+  if [[ -x "$source_setup_dir/scripts/setup-project.sh" ]]; then
+    setup_dir="$source_setup_dir"
+  fi
+fi
+[[ -x "$setup_dir/scripts/setup-project.sh" ]] || {
+  echo "Error: embedded Bioinformatics Sandbox setup is unavailable: $setup_dir/scripts/setup-project.sh" >&2
+  exit 1
+}
+
+sbx_daemon_is_running() {
+  local daemon_status
+  daemon_status="$(sbx daemon status --json 2>/dev/null)" || return 1
+  grep -Eq '"status"[[:space:]]*:[[:space:]]*"running"' <<< "$daemon_status"
+}
+
 ensure_sbx_daemon() {
-  sbx daemon status >/dev/null 2>&1 && return 0
+  sbx_daemon_is_running && return 0
   echo "Starting the Docker Sandboxes daemon in the background..."
   sbx daemon start --detach || {
     echo "Error: could not start the Docker Sandboxes daemon." >&2
@@ -53,7 +66,7 @@ ensure_sbx_daemon() {
   }
   local attempt
   for attempt in {1..15}; do
-    sbx daemon status >/dev/null 2>&1 && return 0
+    sbx_daemon_is_running && return 0
     sleep 1
   done
   echo "Error: the Docker Sandboxes daemon did not become ready within 15 seconds." >&2
@@ -75,25 +88,7 @@ if ! sbx diagnose; then
   exit 1
 fi
 
-asset_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-launcher="$asset_dir/bioinformatics-sandox.sh"
-
-if [[ ! -x "$launcher" ]]; then
-  download_root="$(mktemp -d "${temporary_root%/}/bioinformatics-sandbox-command.XXXXXX")"
-  downloaded_skills="$download_root/skills"
-  echo "Downloading Bioinformatics Sandbox setup files..."
-  git clone --quiet --depth 1 "$skills_repository" "$downloaded_skills"
-  if [[ -n "$skills_ref" ]]; then
-    git -C "$downloaded_skills" fetch --quiet --depth 1 origin "$skills_ref"
-    git -C "$downloaded_skills" checkout --quiet --detach FETCH_HEAD
-  fi
-  launcher="$downloaded_skills/bioinformatics-sandbox/assets/bioinformatics-sandox.sh"
-fi
-
-[[ -x "$launcher" ]] || {
-  echo "Error: downloaded Bioinformatics Sandbox launcher is unavailable: $launcher" >&2
-  exit 1
-}
+setup_script="$setup_dir/scripts/setup-project.sh"
 
 if [[ -z "$agent" ]]; then
   read -r -p "Agent (codex or claude): " agent
@@ -122,4 +117,5 @@ fi
   exit 1
 }
 
-"$launcher" "$agent" "$project_dir"
+"$setup_script" "$project_dir" "$agent" || exit 1
+"$project_dir/code/run-bioinformatics-sandbox.sh" "$agent"

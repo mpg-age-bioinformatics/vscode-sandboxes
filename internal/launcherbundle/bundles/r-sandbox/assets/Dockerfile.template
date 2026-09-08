@@ -1,0 +1,55 @@
+ARG R_IMAGE=ghcr.io/rocker-org/devcontainer/r-ver:__R_VERSION__
+ARG AGENT_TEMPLATE=__AGENT_TEMPLATE__
+ARG LANGUAGESERVER_VERSION=0.3.18
+FROM ${R_IMAGE} AS r_runtime
+ARG LANGUAGESERVER_VERSION
+USER root
+RUN Rscript -e 'install.packages(c("BiocManager", "remotes"), repos="https://cloud.r-project.org")' && \
+    Rscript -e 'stopifnot(requireNamespace("BiocManager", quietly=TRUE))' && \
+    Rscript -e 'remotes::install_version("languageserver", version=Sys.getenv("LANGUAGESERVER_VERSION"), repos="https://cloud.r-project.org", upgrade="never")' && \
+    Rscript -e 'stopifnot(as.character(utils::packageVersion("languageserver")) == Sys.getenv("LANGUAGESERVER_VERSION"))' && \
+    mkdir -p /opt/rocker-r-libs && \
+    find /usr/local/lib/R -type f -exec ldd {} \; 2>/dev/null | \
+    awk '/=> \/(lib|usr\/lib)\// { print $3 } $1 ~ /^\/(lib|usr\/lib)\// { print $1 }' | \
+    grep -Ev '/(ld-linux|libc\.so|libm\.so|libpthread\.so|libdl\.so|librt\.so|libresolv\.so)' | \
+    sort -u | xargs -r -I{} cp -L {} /opt/rocker-r-libs/
+
+FROM docker.io/docker/sandbox-templates:${AGENT_TEMPLATE}
+ARG LANGUAGESERVER_VERSION
+USER root
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      build-essential \
+      ca-certificates \
+      cmake \
+      curl \
+      gfortran \
+      git \
+      libbz2-dev \
+      libcurl4-openssl-dev \
+      libfontconfig1-dev \
+      libfreetype6-dev \
+      libfribidi-dev \
+      libgit2-dev \
+      libharfbuzz-dev \
+      libjpeg-dev \
+      liblzma-dev \
+      libpcre2-dev \
+      libpng-dev \
+      libssl-dev \
+      libtiff-dev \
+      libxml2-dev \
+      pkg-config \
+      zlib1g-dev && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=r_runtime /usr/local/lib/R/ /usr/local/lib/R/
+COPY --from=r_runtime /usr/local/bin/R /usr/local/bin/R
+COPY --from=r_runtime /usr/local/bin/Rscript /usr/local/bin/Rscript
+COPY --from=r_runtime /opt/rocker-r-libs/ /opt/rocker-r-libs/
+ENV LD_LIBRARY_PATH=/opt/rocker-r-libs
+USER agent
+RUN R --version && \
+    R CMD config CC && \
+    R CMD config CXX && \
+    R CMD config FC && \
+    Rscript -e 'stopifnot(file.exists(R.home()), requireNamespace("BiocManager", quietly=TRUE), requireNamespace("languageserver", quietly=TRUE), as.character(utils::packageVersion("languageserver")) == Sys.getenv("LANGUAGESERVER_VERSION"))'

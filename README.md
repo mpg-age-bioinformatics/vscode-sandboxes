@@ -6,6 +6,12 @@ with Docker Sandboxes and open them in Visual Studio Code.
 Each sandbox keeps project files on your computer while running the development tools,
 language runtime, and selected coding agent in an isolated sandbox.
 
+The downloadable launchers are self-contained. Their setup scripts, runtime
+launchers, templates, and editor configuration are packaged from this repository.
+Setup still clones the separate `skills/` repository into the generated project
+for Codex and Claude to discover, but launcher setup and execution never load or
+copy launcher files from that clone.
+
 ## Contents
 
 - [Available sandboxes](#available-sandboxes)
@@ -74,8 +80,8 @@ Sign in once with `sbx login`.
 the Docker engine reports that it is running.** This is required on both macOS
 and Windows. Bioinformatics Sandbox does not require the host Docker engine.
 
-The first setup also requires an internet connection to download the setup
-files, container images, and VS Code extensions.
+The first setup also requires an internet connection to clone the agent skills,
+download container images, and install VS Code extensions.
 
 The setup initializes a Git repository and makes an initial commit. Configure your
 Git name and email first if you have not already done so:
@@ -384,7 +390,7 @@ The selected project directory contains:
 project/
 ├── code/       # Source code, notebooks, launcher, and container recipe
 ├── data/       # Project data
-├── skills/     # Downloaded sandbox setup skills; ignored by Git
+├── skills/     # Cloned agent skills; ignored by Git and not launcher source
 ├── .vscode/    # VS Code configuration
 ├── AGENTS.md
 └── .git/
@@ -392,7 +398,9 @@ project/
 
 Every Windows project receives an agent-specific executable in `code/`:
 `Run Python Sandbox.exe`, `Run R Sandbox.exe`, or
-`Run Bioinformatics Sandbox.exe`. It is committed with the project.
+`Run Bioinformatics Sandbox.exe`. The installer copies its own self-contained
+executable to this stable project-runner name and records the selected agent. It
+is committed with the project.
 
 The project is mounted directly into the sandbox, so edits made in VS Code are
 saved on your computer. The Python virtual environment is stored as `.venv/` in the

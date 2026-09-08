@@ -12,23 +12,21 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-)
 
-const skillsRepository = "https://github.com/mpg-age-bioinformatics/skills.git"
+	"github.com/mpg-age-bioinformatics/vscode-sandboxes/internal/launcherbundle"
+)
 
 var reader = bufio.NewReader(os.Stdin)
 
 type Config struct {
-	AppName          string
-	SandboxSlug      string
-	SkillLauncher    string
-	ProjectRunner    string
-	VersionPrompt    string
-	NeedsVersion     bool
-	NeedsDocker      bool
-	DefaultVersion   string
-	EnvPrefix        string
-	DefaultSkillsRef string
+	AppName        string
+	SandboxSlug    string
+	ProjectRunner  string
+	ShellLauncher  string
+	VersionPrompt  string
+	NeedsVersion   bool
+	NeedsDocker    bool
+	DefaultVersion string
 }
 
 type setupSelection struct {
@@ -38,7 +36,6 @@ type setupSelection struct {
 }
 
 type dependencies struct {
-	git  string
 	bash string
 }
 
@@ -47,10 +44,18 @@ func Main(config Config) {
 	fmt.Println(strings.Repeat("=", len(config.AppName)))
 	fmt.Println()
 
-	err := execute(config)
+	projectMode := invokedAsProjectRunner(config, executablePath())
+	var err error
+	if projectMode {
+		err = runProject(config)
+	} else {
+		err = execute(config)
+	}
 	fmt.Println()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Setup stopped:", err)
+	} else if projectMode {
+		fmt.Println(config.AppName, "opened successfully.")
 	} else {
 		fmt.Println(config.AppName, "finished successfully.")
 	}
@@ -85,8 +90,7 @@ func checkDependencies(needsDocker bool) (dependencies, error) {
 		return dependencies{}, err
 	}
 
-	git, err := requireCommand("git.exe", "Install Git for Windows: https://git-scm.com/download/win")
-	if err != nil {
+	if _, err := requireCommand("git.exe", "Install Git for Windows: https://git-scm.com/download/win"); err != nil {
 		return dependencies{}, err
 	}
 	bash, err := findGitBash()
@@ -129,7 +133,7 @@ func checkDependencies(needsDocker bool) (dependencies, error) {
 	if err := configureVSCodeSSHPath(ssh); err != nil {
 		return dependencies{}, err
 	}
-	return dependencies{git: git, bash: bash}, nil
+	return dependencies{bash: bash}, nil
 }
 
 func configureVSCodeSSHPath(discoveredSSH string) error {
@@ -213,28 +217,15 @@ func run(config Config, deps dependencies, selection setupSelection) error {
 		return err
 	}
 	defer os.RemoveAll(tempRoot)
-	skillsDir := filepath.Join(tempRoot, "skills")
-	repository := getenv(config.EnvPrefix+"_SKILLS_REPOSITORY", skillsRepository)
-	ref := getenv(config.EnvPrefix+"_SKILLS_REF", config.DefaultSkillsRef)
-	if ref == "" {
-		return errors.New("this launcher was built without a pinned skills revision; download a correctly built release or set " + config.EnvPrefix + "_SKILLS_REF")
+	setupDir := filepath.Join(tempRoot, "setup")
+	if err := launcherbundle.Materialize(config.SandboxSlug, setupDir); err != nil {
+		return fmt.Errorf("extract embedded setup files: %w", err)
 	}
-	fmt.Println("Downloading", config.AppName, "setup files at revision", ref+"...")
-	if err := runVisible(deps.git, "-c", "core.autocrlf=false", "clone", "--quiet", "--no-checkout", "--depth", "1", repository, skillsDir); err != nil {
-		return fmt.Errorf("download setup files: %w", err)
+	setupScript := filepath.Join(setupDir, "scripts", "setup-project.sh")
+	if info, err := os.Stat(setupScript); err != nil || info.IsDir() {
+		return fmt.Errorf("embedded setup is incomplete: %s", setupScript)
 	}
-	if err := runVisible(deps.git, "-C", skillsDir, "-c", "core.autocrlf=false", "fetch", "--quiet", "--depth", "1", "origin", ref); err != nil {
-		return fmt.Errorf("download pinned setup revision %s: %w", ref, err)
-	}
-	if err := runVisible(deps.git, "-C", skillsDir, "-c", "core.autocrlf=false", "checkout", "--quiet", "--detach", "FETCH_HEAD"); err != nil {
-		return fmt.Errorf("select pinned setup revision %s: %w", ref, err)
-	}
-
-	launcher := filepath.Join(skillsDir, config.SandboxSlug, "assets", config.SkillLauncher)
-	if info, err := os.Stat(launcher); err != nil || info.IsDir() {
-		return fmt.Errorf("downloaded setup is incomplete: %s", launcher)
-	}
-	unixLauncher, err := cygpath(deps.bash, launcher)
+	unixSetupScript, err := cygpath(deps.bash, setupScript)
 	if err != nil {
 		return err
 	}
@@ -242,21 +233,83 @@ func run(config Config, deps dependencies, selection setupSelection) error {
 	if err != nil {
 		return err
 	}
-	args := []string{unixLauncher}
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locate launcher executable: %w", err)
+	}
+	unixExecutable, err := cygpath(deps.bash, executable)
+	if err != nil {
+		return err
+	}
+	args := []string{unixSetupScript, unixProject}
 	if config.NeedsVersion {
 		args = append(args, selection.version)
 	}
-	args = append(args, selection.agent, unixProject)
+	args = append(args, selection.agent)
 	fmt.Println("Starting setup...")
-	if err := os.Setenv(config.EnvPrefix+"_SKILLS_REF", ref); err != nil {
-		return fmt.Errorf("configure pinned skills revision: %w", err)
-	}
-	if err := runVisible(deps.bash, args...); err != nil {
+	if err := runVisibleEnv(deps.bash, []string{
+		"VSCODE_SANDBOX_PROJECT_RUNNER_SOURCE=" + unixExecutable,
+		"VSCODE_SANDBOX_PROJECT_RUNNER_AGENT=" + selection.agent,
+	}, args...); err != nil {
 		return fmt.Errorf("sandbox setup failed: %w", err)
 	}
 	runner := filepath.Join(project, "code", config.ProjectRunner)
 	if info, err := os.Stat(runner); err != nil || info.IsDir() {
 		return fmt.Errorf("setup did not create the Windows project runner: %s", runner)
+	}
+	return nil
+}
+
+func executablePath() string {
+	path, _ := os.Executable()
+	return path
+}
+
+func invokedAsProjectRunner(config Config, executable string) bool {
+	portablePath := strings.ReplaceAll(executable, `\`, "/")
+	return strings.EqualFold(filepath.Base(portablePath), config.ProjectRunner)
+}
+
+func runProject(config Config) error {
+	if config.ShellLauncher == "" {
+		return errors.New("project shell launcher is not configured")
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locate project runner: %w", err)
+	}
+	codeDir := filepath.Dir(executable)
+	agentPath := filepath.Join(codeDir, "."+config.SandboxSlug+"-agent")
+	agentData, err := os.ReadFile(agentPath)
+	if err != nil {
+		return fmt.Errorf("read project runner configuration: %w", err)
+	}
+	agent := strings.TrimSpace(string(agentData))
+	if agent != "codex" && agent != "claude" {
+		return errors.New("the project runner has an invalid configured agent")
+	}
+	launcher := filepath.Join(codeDir, config.ShellLauncher)
+	if info, err := os.Stat(launcher); err != nil || info.IsDir() {
+		return fmt.Errorf("project launcher is unavailable: %s", launcher)
+	}
+	bash, err := findGitBash()
+	if err != nil {
+		return err
+	}
+	if err := addVSCodeToPath(); err != nil {
+		return err
+	}
+	unixLauncher, err := cygpath(bash, launcher)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(bash, unixLauncher, agent)
+	cmd.Dir = filepath.Dir(codeDir)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("sandbox launcher failed: %w", err)
 	}
 	return nil
 }
@@ -511,7 +564,12 @@ func isUNCPath(path string) bool {
 }
 
 func runVisible(name string, args ...string) error {
+	return runVisibleEnv(name, nil, args...)
+}
+
+func runVisibleEnv(name string, extraEnv []string, args ...string) error {
 	cmd := exec.Command(name, args...)
+	cmd.Env = append(os.Environ(), extraEnv...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

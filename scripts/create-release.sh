@@ -93,6 +93,7 @@ if [[ "$platform" == "macos" ]]; then
   bash -n \
     "$app_path/Contents/MacOS/${sandbox_dir%-sandbox}-sandbox" \
     "$app_path/Contents/Resources/$app_name.command" \
+    "$repository_root/internal/launcherbundle/bundles/$sandbox_dir/scripts/setup-project.sh" \
     "$sandbox_path/scripts/build-macos-dmg.sh"
   if [[ -f "$app_path/Contents/Resources/Setup Form.js" ]]; then
     osacompile -l JavaScript -o "$build_root/Setup Form.scpt" \
@@ -112,17 +113,6 @@ else
 
   temporary_artifact="$build_root/$artifact_stem.exe"
   final_artifact="$sandbox_path/assets/$artifact_stem.exe"
-
-  if [[ -z "${SKILLS_REF:-}" ]]; then
-    echo "Resolving the published skills repository revision..."
-    SKILLS_REF="$(git ls-remote https://github.com/mpg-age-bioinformatics/skills.git HEAD | awk 'NR == 1 { print $1 }')"
-    export SKILLS_REF
-  fi
-  [[ "$SKILLS_REF" =~ ^[0-9a-fA-F]{40}$ ]] || {
-    echo "Error: could not resolve a full skills repository commit ID. Set SKILLS_REF explicitly." >&2
-    exit 1
-  }
-  echo "Pinning Windows launcher to skills revision: $SKILLS_REF"
 
   echo "Building $temporary_artifact..."
   "$sandbox_path/scripts/build-windows-exe.sh" "$temporary_artifact"

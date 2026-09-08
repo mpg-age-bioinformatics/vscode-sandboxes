@@ -4,17 +4,10 @@ set -uo pipefail
 python_version="${1:-}"
 agent="${2:-}"
 project_dir="${3:-}"
-skills_repository="${PYTHON_SANDBOX_SKILLS_REPOSITORY:-https://github.com/mpg-age-bioinformatics/skills.git}"
-skills_ref="${PYTHON_SANDBOX_SKILLS_REF:-}"
-temporary_root="${TMPDIR:-/tmp}"
-download_root=""
 
 finish() {
   status=$?
   trap - EXIT
-  if [[ -n "$download_root" && -d "$download_root" ]]; then
-    rm -rf -- "$download_root"
-  fi
   if [[ -t 0 ]]; then
     echo
     if [[ $status -eq 0 ]]; then
@@ -46,8 +39,28 @@ require_command code "Install Visual Studio Code from https://code.visualstudio.
 require_command sbx "Install Docker Sandboxes from https://docs.docker.com/ai/sandboxes/install/."
 require_command docker "Install Docker Desktop (or another supported Docker engine) and start it."
 
+asset_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+setup_dir="$asset_dir/Setup"
+if [[ ! -x "$setup_dir/scripts/setup-project.sh" ]]; then
+  repository_root="$(CDPATH= cd -- "$asset_dir/../../../../.." 2>/dev/null && pwd)" || repository_root=""
+  source_setup_dir="$repository_root/internal/launcherbundle/bundles/python-sandbox"
+  if [[ -x "$source_setup_dir/scripts/setup-project.sh" ]]; then
+    setup_dir="$source_setup_dir"
+  fi
+fi
+[[ -x "$setup_dir/scripts/setup-project.sh" ]] || {
+  echo "Error: embedded Python Sandbox setup is unavailable: $setup_dir/scripts/setup-project.sh" >&2
+  exit 1
+}
+
+sbx_daemon_is_running() {
+  local daemon_status
+  daemon_status="$(sbx daemon status --json 2>/dev/null)" || return 1
+  grep -Eq '"status"[[:space:]]*:[[:space:]]*"running"' <<< "$daemon_status"
+}
+
 ensure_sbx_daemon() {
-  sbx daemon status >/dev/null 2>&1 && return 0
+  sbx_daemon_is_running && return 0
   echo "Starting the Docker Sandboxes daemon in the background..."
   sbx daemon start --detach || {
     echo "Error: could not start the Docker Sandboxes daemon." >&2
@@ -55,7 +68,7 @@ ensure_sbx_daemon() {
   }
   local attempt
   for attempt in {1..15}; do
-    sbx daemon status >/dev/null 2>&1 && return 0
+    sbx_daemon_is_running && return 0
     sleep 1
   done
   echo "Error: the Docker Sandboxes daemon did not become ready within 15 seconds." >&2
@@ -102,18 +115,8 @@ if [[ -n "$project_dir" ]]; then
   }
 fi
 
-download_root="$(mktemp -d "${temporary_root%/}/python-sandbox-app.XXXXXX")"
-downloaded_skills="$download_root/skills"
-echo "Downloading Python Sandbox setup files..."
-git clone --quiet --depth 1 "$skills_repository" "$downloaded_skills"
-if [[ -n "$skills_ref" ]]; then
-  git -C "$downloaded_skills" fetch --quiet --depth 1 origin "$skills_ref"
-  git -C "$downloaded_skills" checkout --quiet --detach FETCH_HEAD
-fi
-
-launcher="$downloaded_skills/python-sandbox/assets/Python Sandbox.command"
-[[ -x "$launcher" ]] || {
-  echo "Error: downloaded Python Sandbox launcher is unavailable: $launcher" >&2
-  exit 1
-}
-"$launcher" "$python_version" "$agent" "$project_dir"
+setup_script="$setup_dir/scripts/setup-project.sh"
+export VSCODE_SANDBOX_PROJECT_APP_TEMPLATE="$setup_dir/assets/Run Python Sandbox.app.template"
+export VSCODE_SANDBOX_PROJECT_APP_ICON="$asset_dir/PythonSandbox.icns"
+"$setup_script" "$project_dir" "$python_version" "$agent" || exit 1
+"$project_dir/code/run-python-sandbox.sh" "$agent"

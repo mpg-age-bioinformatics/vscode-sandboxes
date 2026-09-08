@@ -1,0 +1,12 @@
+{
+  "r.alwaysUseActiveTerminal": true,
+  "r.bracketedPaste": true,
+  "r.plot.useHttpgd": true,
+  "r.sessionWatcher": true,
+  "workbench.panel.defaultLocation": "bottom",
+  "workbench.sideBar.location": "left",
+  "workbench.startupEditor": "none",
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "extensions.ignoreRecommendations": true,
+  "remote.SSH.defaultExtensions": ["REditorSupport.r", "RDebugger.r-debugger", "quarto.quarto", "openai.chatgpt", "anthropic.claude-code"]
+}

@@ -24,6 +24,16 @@ func TestIsUNCPath(t *testing.T) {
 	}
 }
 
+func TestInvokedAsProjectRunner(t *testing.T) {
+	config := Config{ProjectRunner: "Run Python Sandbox.exe"}
+	if !invokedAsProjectRunner(config, `C:\work\code\Run Python Sandbox.exe`) {
+		t.Fatal("project runner filename was not detected")
+	}
+	if invokedAsProjectRunner(config, `C:\Downloads\Python-Sandbox.exe`) {
+		t.Fatal("installer filename was incorrectly detected as a project runner")
+	}
+}
+
 func TestEnsureJSONCStringSettingAddsSettingAndPreservesComments(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "Code", "User", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+code_dir="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)"
+launcher="$code_dir/run-python-sandbox.command"
+[[ -x "$launcher" ]] || {
+  osascript -e 'display alert "Run Python Sandbox" message "code/run-python-sandbox.command is missing." as critical'
+  exit 1
+}
+
+open -a Terminal "$launcher"

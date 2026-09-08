@@ -12,16 +12,27 @@ download:
 ```text
 <sandbox>/
 ├── assets/     # Application bundles, icons, and release artifacts
+├── windows/    # Native Windows entry point
 └── scripts/    # Reproducible build and packaging scripts
 ```
+
+Shared launcher code and the vendored setup payloads live under `internal/`.
+The payload for each sandbox is in
+`internal/launcherbundle/bundles/<sandbox>/`. Keep it self-contained: it may
+clone the skills repository into a generated project, but it must not read,
+source, execute, or copy setup/runtime files from that clone.
+When project defaults or runtime behavior change, update the vendored payload
+here explicitly and test it as release source; do not add a runtime sync or
+fallback to files in the skills clone.
 
 Keep generated downloads in the sandbox's `assets/` directory and give them a
 stable, descriptive name. A release must not depend on uncommitted files from a
 developer's computer.
 
-The macOS applications in this repository are bootstrap launchers. Their source
-repository URL and revision behavior must be reviewed whenever the corresponding
-sandbox setup repository changes.
+The macOS packaging scripts copy the corresponding vendored setup payload into
+the application bundle. Windows executables embed the same payload at compile
+time. A release must therefore remain usable when the skills clone contains no
+launcher implementation files.
 
 ## Develop through GitHub
 
@@ -118,40 +129,36 @@ go install github.com/tc-hib/go-winres@v0.3.3
 Build test artifacts from the repository root:
 
 ```bash
-SKILLS_REF=<full-published-skills-commit> \
-  ./python-sandbox/scripts/build-windows-exe.sh /tmp/Python-Sandbox.exe
-SKILLS_REF=<full-published-skills-commit> \
-  ./r-sandbox/scripts/build-windows-exe.sh /tmp/R-Sandbox.exe
-SKILLS_REF=<full-published-skills-commit> \
-  ./bioinformatics-sandbox/scripts/build-windows-exe.sh \
+./python-sandbox/scripts/build-windows-exe.sh /tmp/Python-Sandbox.exe
+./r-sandbox/scripts/build-windows-exe.sh /tmp/R-Sandbox.exe
+./bioinformatics-sandbox/scripts/build-windows-exe.sh \
   /tmp/Bioinformatics-Sandbox.exe
 file /tmp/Python-Sandbox.exe /tmp/R-Sandbox.exe \
   /tmp/Bioinformatics-Sandbox.exe
 ```
 
-`SKILLS_REF` must be the complete 40-character commit ID already available from
-the public skills repository. This pins the executable to the exact setup code
-that was tested. `scripts/create-release.sh` resolves the public repository's
-current `HEAD` automatically; set `SKILLS_REF` explicitly to reproduce an older
-release or to coordinate a release against a specific published skills commit.
+The builds have no dependency on a skills repository revision. They embed the
+tracked setup payload from `internal/launcherbundle/bundles/`.
 
 The committed `windows/rsrc_windows_amd64.syso` files contain each executable's
 icon, manifest, and version information. Regenerate them with the build scripts
 whenever an icon or Windows metadata changes.
 
-The initial Windows launchers must also verify that setup created the matching
-`code/Run <Sandbox>.exe`. Those project runners are maintained in the corresponding
-`skills/<sandbox>/assets/windows-project-runner/` directory and built with:
+The initial Windows launcher copies itself to the matching
+`code/Run <Sandbox>.exe` name and writes the selected agent to a companion file.
+The copied executable recognizes the project-runner filename and directly starts
+the bundled runtime launcher. Verify this behavior with:
 
 ```bash
-python-sandbox/scripts/build-windows-project-runners.sh
-r-sandbox/scripts/build-windows-project-runners.sh
-bioinformatics-sandbox/scripts/build-windows-project-runners.sh
+go test ./...
+bash scripts/test-self-contained.sh
+bash scripts/test-daemon-autostart.sh
 ```
 
-Run those commands from the skills repository. Test both the Codex and Claude
-runner variants. A clean generated project must contain the stable user-facing
-filename, track it in Git, and reopen the existing sandbox without rerunning setup.
+The self-contained test provides an empty mock skills clone and requires all
+three setup flows to succeed. A clean generated project must contain the stable
+user-facing runner filename, track it in Git, and reopen the existing sandbox
+without rerunning setup.
 
 Test every executable on a clean, supported 64-bit Windows 11 system. Verify the
 unsupported-Windows and disabled-hypervisor failures, prerequisite diagnostics,

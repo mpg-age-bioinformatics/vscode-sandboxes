@@ -3,7 +3,9 @@ set -euo pipefail
 
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 skill_dir="$(dirname -- "$script_dir")"
+repository_root="$(dirname -- "$skill_dir")"
 app_path="$skill_dir/assets/Python Sandbox.app"
+bundle_path="$repository_root/internal/launcherbundle/bundles/python-sandbox"
 layout_script="$script_dir/layout-dmg.applescript"
 output_path="${1:-$skill_dir/assets/Python-Sandbox.dmg}"
 volume_name="Python Sandbox"
@@ -20,6 +22,7 @@ cleanup() {
 trap cleanup EXIT
 
 [[ -d "$app_path" ]] || { echo "Error: application bundle is unavailable: $app_path" >&2; exit 1; }
+[[ -d "$bundle_path" ]] || { echo "Error: embedded setup bundle is unavailable: $bundle_path" >&2; exit 1; }
 [[ -f "$layout_script" ]] || { echo "Error: DMG layout script is unavailable: $layout_script" >&2; exit 1; }
 [[ "$output_path" == /* ]] || output_path="$(pwd -P)/$output_path"
 [[ ! -e "$output_path" ]] || { echo "Error: refusing to overwrite existing output: $output_path" >&2; exit 1; }
@@ -28,6 +31,10 @@ staging_dir="$build_root/staging"
 read_write_dmg="$build_root/Python-Sandbox-rw.dmg"
 mkdir -p "$staging_dir"
 cp -R "$app_path" "$staging_dir/Python Sandbox.app"
+cp -R "$bundle_path" "$staging_dir/Python Sandbox.app/Contents/Resources/Setup"
+chmod 755 "$staging_dir/Python Sandbox.app/Contents/Resources/Setup/scripts/setup-project.sh" \
+  "$staging_dir/Python Sandbox.app/Contents/Resources/Setup/assets/run-python-sandbox.sh" \
+  "$staging_dir/Python Sandbox.app/Contents/Resources/Setup/assets/Run Python Sandbox.app.template/Contents/MacOS/run-python-sandbox"
 ln -s /Applications "$staging_dir/Applications"
 
 hdiutil create -quiet -volname "$volume_name" -srcfolder "$staging_dir" -format UDRW "$read_write_dmg"
