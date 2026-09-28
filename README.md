@@ -485,6 +485,9 @@ does not require Docker Desktop.
 ### Visual Studio Code is not found
 
 Install Visual Studio Code for your operating system and run the sandbox app again.
+On macOS, the sandbox apps automatically find `Visual Studio Code.app` in
+`/Applications` or on your Desktop (`~/Desktop`). An existing `code` command on
+`PATH` takes precedence.
 
 ### Setup stops while making the Git commit
 

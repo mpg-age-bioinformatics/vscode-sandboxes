@@ -15,7 +15,7 @@ go_winres="${GO_WINRES:-$(go env GOPATH)/bin/go-winres}"
 
 cd "$repository_root"
 "$go_winres" simply --arch amd64 --out "$sandbox_dir/windows/rsrc" \
-  --product-version 1.0.0 --file-version 1.0.0 --manifest cli \
+  --product-version 1.0.1 --file-version 1.0.1 --manifest cli \
   --file-description "R Sandbox launcher" --product-name "R Sandbox" \
   --original-filename "R-Sandbox.exe" --icon "$icon_path"
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \

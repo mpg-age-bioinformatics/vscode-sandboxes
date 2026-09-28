@@ -180,44 +180,30 @@ different build command, document it in this file under its own heading.
 
 ## Publish with a GitHub Release
 
-Use a sandbox-specific version tag so releases from different sandboxes cannot
-collide. The convention is `<sandbox>-v<version>`, for example
-`python-sandbox-v1.0.0`.
+Publish one combined release containing the macOS and Windows downloads for all
+three sandboxes, following the existing `v0.0.1` and `v1.0.0` releases. Use a
+repository-wide `v<version>` tag and the title `VS Code Sandboxes <version>`.
+
+Update the macOS application versions (including the Python project-runner
+template) and the Windows product/file versions in all three build scripts.
+Rebuild and verify all six artifacts with `scripts/create-release.sh`, then
+commit the source, metadata, Windows resources, and finished artifacts together.
 
 After the release commit is on the default branch:
 
 ```bash
-git tag -a python-sandbox-v1.0.0 -m "Python Sandbox 1.0.0"
-git push origin python-sandbox-v1.0.0
-gh release create python-sandbox-v1.0.0 \
+git tag -a v1.0.1 -m "VS Code Sandboxes 1.0.1"
+git push origin v1.0.1
+gh release create v1.0.1 \
   python-sandbox/assets/Python-Sandbox.dmg \
   python-sandbox/assets/Python-Sandbox.exe \
-  --title "Python Sandbox 1.0.0" \
-  --generate-notes
-```
-
-For an R Sandbox release, use the corresponding R-specific tag and artifact:
-
-```bash
-git tag -a r-sandbox-v1.0.0 -m "R Sandbox 1.0.0"
-git push origin r-sandbox-v1.0.0
-gh release create r-sandbox-v1.0.0 \
   r-sandbox/assets/R-Sandbox.dmg \
   r-sandbox/assets/R-Sandbox.exe \
-  --title "R Sandbox 1.0.0" \
-  --generate-notes
-```
-
-For a Bioinformatics Sandbox release:
-
-```bash
-git tag -a bioinformatics-sandbox-v1.0.0 -m "Bioinformatics Sandbox 1.0.0"
-git push origin bioinformatics-sandbox-v1.0.0
-gh release create bioinformatics-sandbox-v1.0.0 \
   bioinformatics-sandbox/assets/Bioinformatics-Sandbox.dmg \
   bioinformatics-sandbox/assets/Bioinformatics-Sandbox.exe \
-  --title "Bioinformatics Sandbox 1.0.0" \
-  --generate-notes
+  --verify-tag --latest \
+  --title "VS Code Sandboxes 1.0.1" \
+  --notes-file /path/to/release-notes.md
 ```
 
 Before publishing, confirm that the DMG and EXE files in `assets/` are the same
@@ -225,5 +211,6 @@ builds that were tested. Give users the GitHub Release page—not a link to the
 `.app` directory in the source tree. macOS users install through the DMG; Windows
 users download the matching EXE directly.
 
-For another sandbox, replace the directory, tag, title, and artifact filename
-with that sandbox's values. Publish one GitHub Release per sandbox version.
+Use the next appropriate version in place of `1.0.1`. After publishing, verify
+that all six release downloads match the tested local files and that the release
+is marked as the latest stable version.

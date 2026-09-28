@@ -27,9 +27,15 @@ require_command() {
   }
 }
 
-if ! command -v code >/dev/null 2>&1 && [[ -x "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" ]]; then
-  PATH="/Applications/Visual Studio Code.app/Contents/Resources/app/bin:$PATH"
-  export PATH
+if ! command -v code >/dev/null 2>&1; then
+  for code_bin in \
+    "/Applications/Visual Studio Code.app/Contents/Resources/app/bin" \
+    "$HOME/Desktop/Visual Studio Code.app/Contents/Resources/app/bin"; do
+    if [[ -x "$code_bin/code" ]]; then
+      export PATH="$code_bin:$PATH"
+      break
+    fi
+  done
 fi
 
 require_command git "Install Git from https://git-scm.com/download/mac and reopen the app."

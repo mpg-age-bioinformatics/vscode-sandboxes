@@ -156,7 +156,8 @@ else
   for candidate in \
     "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" \
     "$HOME/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" \
-    "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code"; do
+    "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code" \
+    "$HOME/Desktop/Visual Studio Code.app/Contents/Resources/app/bin/code"; do
     if [[ -x "$candidate" ]]; then
       code_cli="$candidate"
       break

@@ -122,7 +122,8 @@ else
   for candidate in \
     "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" \
     "$HOME/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" \
-    "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code"; do
+    "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code" \
+    "$HOME/Desktop/Visual Studio Code.app/Contents/Resources/app/bin/code"; do
     if [[ -x "$candidate" ]]; then code_cli="$candidate"; break; fi
   done
   [[ -n "$code_cli" ]] || { echo "Error: neither the code CLI nor Visual Studio Code was found." >&2; exit 1; }
