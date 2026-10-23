@@ -144,6 +144,8 @@ case "$sandbox_project_root" in
   *) echo "Error: could not determine the project path inside the sandbox: $sandbox_project_root" >&2; exit 1 ;;
 esac
 sandbox_r_library="$sandbox_project_root/.r-library"
+# Install/restore project tooling without rebuilding the sandbox image.
+native_exec sbx exec --env "R_LIBS_USER=$sandbox_r_library" --workdir "$sandbox_project_root" "$sandbox_name" Rscript code/setup-renv.R
 native_exec sbx exec --env "EXPECTED_R_SERIES=$r_series" --env "R_LIBS_USER=$sandbox_r_library" --workdir "$sandbox_project_root" "$sandbox_name" Rscript -e \
   'actual <- paste(R.version$major, strsplit(R.version$minor, ".", fixed=TRUE)[[1]][1], sep="."); stopifnot(identical(actual, Sys.getenv("EXPECTED_R_SERIES")), normalizePath(Sys.getenv("R_LIBS_USER"), mustWork=TRUE) %in% normalizePath(.libPaths(), mustWork=FALSE), requireNamespace("BiocManager", quietly=TRUE), requireNamespace("languageserver", quietly=TRUE), as.character(utils::packageVersion("languageserver")) == "0.3.18"); cat(R.version.string, "\n"); cat("BiocManager", as.character(utils::packageVersion("BiocManager")), "\n"); cat("languageserver", as.character(utils::packageVersion("languageserver")), "\n"); cat(.libPaths(), sep="\n")'
 

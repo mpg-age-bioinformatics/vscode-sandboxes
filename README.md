@@ -406,7 +406,32 @@ saved on your computer. The Python virtual environment is stored as `.venv/` in 
 project and is configured as VS Code's interpreter.
 
 R projects additionally contain `.r-library/`, which is their project-local R
-package library. Manage its dependencies with `renv`.
+package library. The launcher runs `code/setup-renv.R` inside the sandbox before
+opening VS Code. It initializes renv or restores `renv.lock`, installs the pinned
+editor packages locally, and verifies them in a fresh R process, including a
+plot-device smoke test. Commit the generated lockfile and renv activation/settings
+files. The setup uses renv's [bare initialization](https://pkgs.rstudio.com/renv/reference/init.html)
+and snapshots all installed dependencies.
+
+For dependency changes, edit `code/setup-renv.R` with exact versions and update
+`renv.lock` together; install BiocManager separately before Bioconductor packages.
+Both startup and sectioned scripts use `.r-library/`; scripts start with
+`source("code/activate-project.R")` from the project root. Transactional installs
+and the cache are disabled as working settings for this Remote-SSH environment.
+
+For Command+Enter, use **R: Create R terminal** in the Remote-SSH window. The
+standard R console uses `r.alwaysUseActiveTerminal: false` and
+`r.bracketedPaste: false`. Interactive plot code should default an editable display
+flag to `interactive()`, check that `getOption("device")` is a function, then use
+`grDevices::dev.new(width = 10, height = 8.2, noRStudioGD = TRUE)` and explicitly
+draw the plot. Leave that device open. Calling `httpgd::hgd()` directly bypasses
+VS Code's viewer callback; a remote localhost URL does not automatically open a
+local viewer. Batch scripts should save files without opening a viewer. See the
+generated `AGENTS.md` for the heatmap pattern and rendering checks.
+
+Existing projects can adopt these settings and dependency scripts directly;
+ordinary analysis and editor changes do not require rebuilding the sandbox or
+rerunning the scaffolding installer.
 
 ### Open the project again
 

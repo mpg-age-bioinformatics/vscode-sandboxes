@@ -55,6 +55,23 @@ run_case() {
       runner_name="Run R Sandbox.exe"
       cmp "$bundle/assets/run-r-sandbox.sh" "$project/code/run-r-sandbox.sh"
       [[ "$(< "$project/code/.r-sandbox-agent")" == "$agent" ]]
+      for script in activate-project.R setup-renv.R verify-renv.R; do
+        cmp "$bundle/assets/$script" "$project/code/$script"
+      done
+      cmp "$bundle/assets/Rprofile" "$project/.Rprofile"
+      # Use real Git here: ensure reproduction files survive the root allowlist.
+      git -C "$project" init -q
+      mkdir -p "$project/renv/cache" "$project/renv/library" "$project/.r-library/pkg"
+      for tracked in .Rprofile .Renviron renv.lock renv/activate.R renv/settings.json code/setup-renv.R data/demo.csv data/demo.png; do
+        touch "$project/$tracked"
+        if git -C "$project" check-ignore -q "$tracked"; then
+          echo "Reproduction file ignored: $tracked" >&2
+          exit 1
+        fi
+      done
+      for ignored in .r-library/pkg/file renv/cache/file renv/library/file skills/EMPTY_SKILLS_CLONE; do
+        git -C "$project" check-ignore -q "$ignored"
+      done
       ;;
     bioinformatics-sandbox)
       runner_name="Run Bioinformatics Sandbox.exe"

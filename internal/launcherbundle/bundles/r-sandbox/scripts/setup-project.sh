@@ -52,7 +52,7 @@ printf '%s\n' "$agent" > "$generated_agent"
 install_if_absent_or_identical "$generated_dockerfile" code/Dockerfile
 install_if_absent_or_identical "$skill_dir/assets/run-r-sandbox.sh" code/run-r-sandbox.sh
 chmod +x code/run-r-sandbox.sh
-setup_paths=(.vscode/settings.json .vscode/extensions.json .gitignore .gitattributes .Renviron AGENTS.md .instructions.md code/Dockerfile code/run-r-sandbox.sh)
+setup_paths=(.Rprofile code/activate-project.R code/setup-renv.R code/verify-renv.R .vscode/settings.json .vscode/extensions.json .gitignore .gitattributes .Renviron AGENTS.md .instructions.md code/Dockerfile code/run-r-sandbox.sh)
 if [[ -n "$project_runner_source" ]]; then
   [[ -f "$project_runner_source" ]] || { echo "Error: bundled Windows project runner is unavailable: $project_runner_source" >&2; exit 1; }
   [[ "$project_runner_agent" == "$agent" ]] || { echo "Error: bundled Windows project runner agent does not match the setup selection." >&2; exit 1; }
@@ -71,6 +71,10 @@ elif ! grep -Fq '<!-- r-sandbox:scientific-libraries:start -->' AGENTS.md; then
     "$skill_dir/assets/AGENTS.md" >> AGENTS.md
 fi
 install_if_absent_or_identical "$skill_dir/assets/Renviron" .Renviron
+install_if_absent_or_identical "$skill_dir/assets/Rprofile" .Rprofile
+for script in activate-project.R setup-renv.R verify-renv.R; do
+  install_if_absent_or_identical "$skill_dir/assets/$script" "code/$script"
+done
 
 if [[ ! -e .gitignore ]]; then
   cp "$skill_dir/assets/gitignore" .gitignore

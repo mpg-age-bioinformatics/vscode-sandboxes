@@ -1,1 +1,5 @@
 R_LIBS_USER=.r-library
+RENV_PATHS_LIBRARY=.r-library
+# Working settings for this Remote-SSH environment, not universal renv requirements.
+RENV_CONFIG_INSTALL_TRANSACTIONAL=FALSE
+RENV_CONFIG_CACHE_ENABLED=FALSE

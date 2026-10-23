@@ -5,3 +5,15 @@
 !/.vscode
 !.instructions.md
 !.Renviron
+!/.Rprofile
+!/renv.lock
+!/renv/
+/renv/*
+!/renv/activate.R
+!/renv/settings.json
+!/renv/.gitignore
+!/data/
+/.r-library/
+/renv/library/
+/renv/staging/
+/renv/cache/
