@@ -65,7 +65,7 @@ if [[ "${BIOINFORMATICS_SANDBOX_SKIP_VSCODE:-0}" != "1" ]]; then
   command -v ssh >/dev/null 2>&1 || { echo "Error: an OpenSSH client is required for VS Code Remote-SSH." >&2; exit 1; }
 fi
 sbx_version="$(native_exec sbx version 2>&1)" || { echo "Error: 'sbx version' failed: $sbx_version" >&2; exit 1; }
-if [[ ! "$sbx_version" =~ (Client[[:space:]]Version:|sbx[[:space:]]version:)[[:space:]]v?([0-9]+)\.([0-9]+)\.([0-9]+) ]] ||
+if [[ ! "$sbx_version" =~ (Client[[:space:]]Version:|sbx[[:space:]]version:)[[:space:]]+v?([0-9]+)\.([0-9]+)\.([0-9]+) ]] ||
    (( 10#${BASH_REMATCH[2]} == 0 && 10#${BASH_REMATCH[3]} < 39 )); then
   echo "Error: Docker Sandboxes 0.39.0 or newer is required. Detected: $sbx_version" >&2
   exit 1
@@ -85,6 +85,40 @@ if native_exec sbx ls --quiet | grep -Fqx "$sandbox_name"; then
 else
   native_exec sbx run --detached --name "$sandbox_name" "$agent" "$(host_path "$project_root")"
 fi
+
+# Workload containers use Podman inside the sandbox, never a host socket.
+native_exec sbx exec --user root "$sandbox_name" sh -ec '
+  if ! command -v podman >/dev/null 2>&1; then
+    # apt update does not honor DPkg::Lock::Timeout for its lists lock.
+    # Retry lock contention only; leave genuine package/network errors visible.
+    apt_with_lock_retry() {
+      attempt=0
+      apt_output="$(mktemp)"
+      while :; do
+        if LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get "$@" >"$apt_output" 2>&1; then
+          cat "$apt_output"
+          rm -f "$apt_output"
+          return 0
+        else
+          apt_status=$?
+        fi
+        cat "$apt_output" >&2
+        attempt=$((attempt + 1))
+        if ! grep -Eq "Could not get lock|Unable to acquire.*lock|Unable to lock directory" "$apt_output" || [ "$attempt" -ge 60 ]; then
+          rm -f "$apt_output"
+          return "$apt_status"
+        fi
+        echo "Waiting for the sandbox package manager (attempt $attempt/60)..." >&2
+        sleep 5
+      done
+    }
+    apt_with_lock_retry update --error-on=any
+    apt_with_lock_retry install -y --no-install-recommends podman uidmap slirp4netns fuse-overlayfs
+  fi
+  mkdir -p /run/user/0/libpod/tmp
+  chmod 700 /run/user/0
+  XDG_RUNTIME_DIR=/run/user/0 podman --storage-driver=vfs --events-backend=file info >/dev/null
+'
 
 sandbox_project_root="$(native_exec sbx exec "$sandbox_name" sh -c 'pwd -P')"
 case "$sandbox_project_root" in

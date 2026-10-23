@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+if [[ -x /opt/podman/bin/podman ]]; then export PATH="${PATH}:/opt/podman/bin"; fi
+
 r_version="${1:-}"
 agent="${2:-}"
 project_dir="${3:-}"
@@ -43,7 +45,7 @@ require_command git "Install Git from https://git-scm.com/download/mac and reope
 require_command ssh "Install or restore the macOS OpenSSH client and reopen the app."
 require_command code "Install Visual Studio Code from https://code.visualstudio.com/docs/setup/mac and enable its shell command."
 require_command sbx "Install Docker Sandboxes from https://docs.docker.com/ai/sandboxes/install/."
-require_command docker "Install Docker Desktop (or another supported Docker engine) and start it."
+require_command podman "Install Podman, then run podman machine init (once) and podman machine start."
 
 asset_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 setup_dir="$asset_dir/Setup"
@@ -85,7 +87,7 @@ sbx_version="$(sbx version 2>&1)" || {
   echo "Error: Docker Sandboxes is installed but 'sbx version' failed: $sbx_version" >&2
   exit 1
 }
-if [[ ! "$sbx_version" =~ (Client[[:space:]]Version:|sbx[[:space:]]version:)[[:space:]]v?([0-9]+)\.([0-9]+)\.([0-9]+) ]] ||
+if [[ ! "$sbx_version" =~ (Client[[:space:]]Version:|sbx[[:space:]]version:)[[:space:]]+v?([0-9]+)\.([0-9]+)\.([0-9]+) ]] ||
    (( 10#${BASH_REMATCH[2]} == 0 && 10#${BASH_REMATCH[3]} < 39 )); then
   echo "Error: Docker Sandboxes 0.39.0 or newer is required. Detected: $sbx_version" >&2
   exit 1
@@ -95,8 +97,8 @@ if ! sbx diagnose; then
   echo "Error: Docker Sandboxes diagnostics failed. Confirm virtualization is available and run 'sbx login'." >&2
   exit 1
 fi
-if ! docker info >/dev/null 2>&1; then
-  echo "Error: the Docker daemon is not available. Start Docker Desktop (or your Docker engine) and retry." >&2
+if ! podman info >/dev/null 2>&1; then
+  echo "Error: Podman is not available. Run podman machine init (once) and podman machine start, then retry." >&2
   exit 1
 fi
 

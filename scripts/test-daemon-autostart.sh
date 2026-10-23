@@ -35,7 +35,7 @@ case "${1:-}:${2:-}" in
 esac
 MOCK
 
-for command in git ssh code docker; do
+for command in git ssh code podman; do
   cat > "$mock_bin/$command" <<'MOCK'
 #!/usr/bin/env bash
 exit 0

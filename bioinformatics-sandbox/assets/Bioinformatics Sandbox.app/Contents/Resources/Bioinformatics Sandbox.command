@@ -83,7 +83,7 @@ sbx_version="$(sbx version 2>&1)" || {
   echo "Error: Docker Sandboxes is installed but 'sbx version' failed: $sbx_version" >&2
   exit 1
 }
-if [[ ! "$sbx_version" =~ (Client[[:space:]]Version:|sbx[[:space:]]version:)[[:space:]]v?([0-9]+)\.([0-9]+)\.([0-9]+) ]] ||
+if [[ ! "$sbx_version" =~ (Client[[:space:]]Version:|sbx[[:space:]]version:)[[:space:]]+v?([0-9]+)\.([0-9]+)\.([0-9]+) ]] ||
    (( 10#${BASH_REMATCH[2]} == 0 && 10#${BASH_REMATCH[3]} < 39 )); then
   echo "Error: Docker Sandboxes 0.39.0 or newer is required. Detected: $sbx_version" >&2
   exit 1

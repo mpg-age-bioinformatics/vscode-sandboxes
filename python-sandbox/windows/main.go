@@ -10,7 +10,7 @@ func main() {
 		ShellLauncher:  "run-python-sandbox.sh",
 		VersionPrompt:  "Python version (major.minor or major.minor.patch)",
 		NeedsVersion:   true,
-		NeedsDocker:    true,
+		NeedsPodman:    true,
 		DefaultVersion: "3.13",
 	})
 }

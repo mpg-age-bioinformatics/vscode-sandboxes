@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Podman Desktop installs its macOS CLI outside the usual shell PATH.
+if [[ -x /opt/podman/bin/podman ]]; then export PATH="${PATH}:/opt/podman/bin"; fi
+
 agent="${1:-}"
 case "$agent" in
   codex) agent_template="codex" ;;
@@ -68,13 +71,13 @@ else
   exit 1
 fi
 workspace_id="$(printf '%s:%s' "$workspace_key" "$workspace_stat" | cksum | awk '{print $1}')"
-command -v docker >/dev/null 2>&1 || { echo "Error: Docker CLI is required to build the sandbox template." >&2; exit 1; }
+command -v podman >/dev/null 2>&1 || { echo "Error: Podman CLI is required to build the sandbox template." >&2; exit 1; }
 command -v sbx >/dev/null 2>&1 || { echo "Error: Docker Sandboxes CLI (sbx) is not installed." >&2; exit 1; }
 if [[ "${PYTHON_SANDBOX_SKIP_VSCODE:-0}" != "1" ]]; then
   command -v ssh >/dev/null 2>&1 || { echo "Error: an OpenSSH client is required for VS Code Remote-SSH." >&2; exit 1; }
 fi
 sbx_version="$(native_exec sbx version 2>&1)" || { echo "Error: 'sbx version' failed: $sbx_version" >&2; exit 1; }
-if [[ ! "$sbx_version" =~ (Client[[:space:]]Version:|sbx[[:space:]]version:)[[:space:]]v?([0-9]+)\.([0-9]+)\.([0-9]+) ]] ||
+if [[ ! "$sbx_version" =~ (Client[[:space:]]Version:|sbx[[:space:]]version:)[[:space:]]+v?([0-9]+)\.([0-9]+)\.([0-9]+) ]] ||
    (( 10#${BASH_REMATCH[2]} == 0 && 10#${BASH_REMATCH[3]} < 39 )); then
   echo "Error: Docker Sandboxes 0.39.0 or newer is required. Detected: $sbx_version" >&2
   exit 1
@@ -84,17 +87,17 @@ native_exec sbx setup ssh
 if (( ! windows_git_bash )); then
   native_exec sbx diagnose || { echo "Error: Docker Sandboxes diagnostics failed after SSH setup. Confirm virtualization and authentication." >&2; exit 1; }
 fi
-docker_os="$(native_exec docker info --format '{{.OSType}}' 2>/dev/null)" || { echo "Error: the Docker daemon is unavailable. Start Docker Desktop and retry." >&2; exit 1; }
-[[ "$(printf '%s' "$docker_os" | tr '[:upper:]' '[:lower:]')" == "linux" ]] || { echo "Error: Docker must be running Linux containers; detected: $docker_os" >&2; exit 1; }
+podman_os="$(native_exec podman info --format '{{.Host.OS}}' 2>/dev/null)" || { echo "Error: Podman is unavailable. Run podman machine init (once) and podman machine start, then retry." >&2; exit 1; }
+[[ "$(printf '%s' "$podman_os" | tr '[:upper:]' '[:lower:]')" == "linux" ]] || { echo "Error: Podman must be running Linux containers; detected: $podman_os" >&2; exit 1; }
 
 sandbox_name="py-${project_name}-${workspace_id}-${agent}"
-template_tag="python-sandbox-${project_name}-${workspace_id}-${agent}:local"
+template_tag="localhost/python-sandbox-${project_name}-${workspace_id}-${agent}:local"
 temporary_root="${TMPDIR:-/tmp}"
 template_tar="$(mktemp "${temporary_root%/}/python-sandbox-template.XXXXXX")"
 trap 'rm -f "$template_tar"' EXIT
 
-native_exec docker build --build-arg "AGENT_TEMPLATE=$agent_template" -t "$template_tag" -f "$(host_path "$project_root/code/Dockerfile")" "$(host_path "$project_root/code")"
-native_exec docker image save "$template_tag" -o "$(host_path "$template_tar")"
+native_exec podman build --build-arg "AGENT_TEMPLATE=$agent_template" -t "$template_tag" -f "$(host_path "$project_root/code/Dockerfile")" "$(host_path "$project_root/code")"
+native_exec podman save --format docker-archive "$template_tag" -o "$(host_path "$template_tar")"
 native_exec sbx template load "$(host_path "$template_tar")"
 
 echo "Sandbox: $sandbox_name"
@@ -104,11 +107,45 @@ echo "Workspace: $project_root"
 if native_exec sbx ls --quiet | grep -Fqx "$sandbox_name"; then
   native_exec sbx run --detached --name "$sandbox_name"
 else
-  native_exec sbx run --detached --name "$sandbox_name" --template "$template_tag" "$agent" "$(host_path "$project_root")"
+  native_exec sbx run --detached --pull never --name "$sandbox_name" --template "$template_tag" "$agent" "$(host_path "$project_root")"
 fi
 
-python_series="$(sed -n 's/^ARG PYTHON_IMAGE=python:\([0-9][0-9]*\.[0-9][0-9]*\)-bookworm$/\1/p' "$project_root/code/Dockerfile")"
+python_series="$(sed -n 's/^ARG PYTHON_IMAGE=docker.io\/library\/python:\([0-9][0-9]*\.[0-9][0-9]*\)-bookworm$/\1/p' "$project_root/code/Dockerfile")"
 [[ -n "$python_series" ]] || { echo "Error: could not determine the Python series from code/Dockerfile." >&2; exit 1; }
+# Workload containers use Podman inside the sandbox, never a host socket.
+native_exec sbx exec --user root "$sandbox_name" sh -ec '
+  if ! command -v podman >/dev/null 2>&1; then
+    # apt update does not honor DPkg::Lock::Timeout for its lists lock.
+    # Retry lock contention only; leave genuine package/network errors visible.
+    apt_with_lock_retry() {
+      attempt=0
+      apt_output="$(mktemp)"
+      while :; do
+        if LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get "$@" >"$apt_output" 2>&1; then
+          cat "$apt_output"
+          rm -f "$apt_output"
+          return 0
+        else
+          apt_status=$?
+        fi
+        cat "$apt_output" >&2
+        attempt=$((attempt + 1))
+        if ! grep -Eq "Could not get lock|Unable to acquire.*lock|Unable to lock directory" "$apt_output" || [ "$attempt" -ge 60 ]; then
+          rm -f "$apt_output"
+          return "$apt_status"
+        fi
+        echo "Waiting for the sandbox package manager (attempt $attempt/60)..." >&2
+        sleep 5
+      done
+    }
+    apt_with_lock_retry update --error-on=any
+    apt_with_lock_retry install -y --no-install-recommends podman uidmap slirp4netns fuse-overlayfs
+  fi
+  mkdir -p /run/user/0/libpod/tmp
+  chmod 700 /run/user/0
+  XDG_RUNTIME_DIR=/run/user/0 podman --storage-driver=vfs --events-backend=file info >/dev/null
+'
+
 sandbox_project_root="$(native_exec sbx exec "$sandbox_name" sh -c 'pwd -P')"
 case "$sandbox_project_root" in
   /*) ;;

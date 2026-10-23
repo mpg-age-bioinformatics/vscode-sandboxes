@@ -65,9 +65,7 @@ Docker Sandboxes currently requires an Apple silicon Mac running macOS Sonoma
 14 or newer. Install and configure:
 
 - [Git](https://git-scm.com/download/mac);
-- for **Python Sandbox** and **R Sandbox** only, the Docker CLI and a running
-  Docker engine, such as
-  [Docker Desktop](https://www.docker.com/products/docker-desktop/);
+- for **Python Sandbox** and **R Sandbox** only, [Podman](https://podman.io/) with an initialized, running Podman machine;
 - [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/install/) with the
   `sbx` command, version 0.39.0 or newer;
 - [Visual Studio Code](https://code.visualstudio.com/docs/setup/mac) for macOS;
@@ -76,9 +74,9 @@ Docker Sandboxes currently requires an Apple silicon Mac running macOS Sonoma
 
 Sign in once with `sbx login`.
 
-**Before opening Python Sandbox or R Sandbox, start Docker Desktop and wait until
-the Docker engine reports that it is running.** This is required on both macOS
-and Windows. Bioinformatics Sandbox does not require the host Docker engine.
+**Before opening Python Sandbox or R Sandbox, run `podman machine init` once,
+then `podman machine start`.** This applies on macOS and Windows. Bioinformatics
+Sandbox does not require host Podman. Docker Desktop is not required by any launcher.
 
 The first setup also requires an internet connection to clone the agent skills,
 download container images, and install VS Code extensions.
@@ -113,16 +111,17 @@ git config --global --get user.email
 0.39.0 or newer, and `sbx diagnose` must finish without failed checks. The
 `sbx login` command is interactive; complete the sign-in before continuing.
 
-For Python Sandbox or R Sandbox, also start Docker Desktop and verify the host
-Docker engine:
+For Python Sandbox or R Sandbox, initialize/start the Podman machine and verify it:
 
 ```bash
-docker version
-docker info --format '{{.OSType}}'
+podman machine init # once only
+podman machine start
+podman version
+podman info --format '{{.Host.OS}}'
 ```
 
 The final command must print `linux`. Bioinformatics Sandbox does not require
-these two Docker checks. If either Git identity command prints nothing, configure
+these Podman checks. If either Git identity command prints nothing, configure
 the missing value before running a launcher.
 
 ### Install the macOS applications
@@ -223,8 +222,9 @@ build tools and language-server dependencies.
    creates or reconnects to the sandbox, configures SSH, installs the scientific
    VS Code extensions, and opens the project.
 
-Workload containers run on the Docker daemon inside the sandbox, not on the host
-Docker socket.
+Workload containers run using Podman installed inside the sandbox, without a host
+container socket. The launcher installs Podman on first connection and checks its
+root-owned VFS store on every connection.
 
 ## Windows
 
@@ -243,22 +243,19 @@ Install these prerequisites first:
   newer, then sign in with `sbx login`;
 - [Visual Studio Code](https://code.visualstudio.com/) and access to Codex or
   Claude Code; and
-- for **Python Sandbox** and **R Sandbox** only, a running Docker engine on a
-  Windows edition and build supported by
-  [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/).
+- for **Python Sandbox** and **R Sandbox** only, [Podman](https://podman.io/)
+  with an initialized, running Podman machine.
 
 Use a project folder on a local Windows drive. Network shares and WSL UNC paths
 are rejected because they do not provide the local filesystem behavior required
-by mounted sandbox workspaces. Python Sandbox and R Sandbox require Docker
-Desktop to be running Linux containers.
+by mounted sandbox workspaces. Python Sandbox and R Sandbox use host Podman to
+build templates and export Docker-compatible archives for `sbx template load`.
 
-Bioinformatics Sandbox does not require Docker Desktop; workload containers use
-the private Docker daemon supplied inside Docker Sandboxes.
+Bioinformatics Sandbox does not require host Podman. All three launchers install
+Podman inside the sandbox for workload containers. Docker Desktop is not required.
 
-**Before opening Python Sandbox or R Sandbox, start Docker Desktop and wait until
-the Docker engine reports that it is running.** If Docker Desktop is stopped—or
-is using Windows containers instead of Linux containers—the launcher cannot
-build the sandbox environment.
+Before opening Python Sandbox or R Sandbox, run `podman machine init` once and
+`podman machine start`. Verify `podman info` succeeds before launching.
 
 ### Verify Windows requirements before downloading
 
@@ -291,16 +288,17 @@ Git's bundled SSH client. If Git Bash was installed somewhere else, replace its
 path in the command above. If either Git identity command prints nothing,
 configure the missing value before running a launcher.
 
-For Python Sandbox or R Sandbox, start Docker Desktop in Linux-container mode
-and also run:
+For Python Sandbox or R Sandbox, initialize/start the Podman machine and run:
 
 ```powershell
-docker.exe version
-docker.exe info --format '{{.OSType}}'
+podman.exe machine init # once only
+podman.exe machine start
+podman.exe version
+podman.exe info --format '{{.Host.OS}}'
 ```
 
 The final command must print `linux`. Bioinformatics Sandbox does not require
-these two Docker checks.
+these Podman checks.
 
 ### Download the Windows executables
 
@@ -318,7 +316,7 @@ The executables are currently unsigned. Windows SmartScreen may show an
 unrecognized-app warning. Run an executable only if it came from the
 [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
 page. The launcher checks compatibility and prerequisites before creating
-or modifying a project; it does not install Docker, enable Windows features, or
+or modifying a project; it does not install host Podman, enable Windows features, or
 request administrator privileges.
 
 If Windows blocks the downloaded executable:
@@ -374,8 +372,9 @@ build tools and language-server dependencies.
    the sandbox, configures SSH, installs the scientific VS Code extensions, and
    opens the project.
 
-Workload containers run on the Docker daemon inside the sandbox, not on the host
-Docker socket.
+Workload containers run using Podman installed inside the sandbox, without a host
+container socket. The launcher installs Podman on first connection and checks its
+root-owned VFS store on every connection.
 
 ## Using the generated project
 
@@ -475,12 +474,30 @@ sbx login
 The sandbox apps require Docker Sandboxes CLI 0.39.0 or newer and an authenticated
 Docker Sandboxes session.
 
-### `Docker CLI is required`
+### `Podman CLI is required` or Podman is unavailable
 
-Python Sandbox and R Sandbox require a running Docker engine in addition to
-Docker Sandboxes. Confirm that Docker Desktop supports your operating-system
-edition and version, start it, and run `docker version`. Bioinformatics Sandbox
-does not require Docker Desktop.
+Python Sandbox and R Sandbox require host Podman in addition to Docker Sandboxes.
+Install Podman, run `podman machine init` once, then `podman machine start`, and
+verify `podman info` succeeds. Bioinformatics Sandbox does not require host Podman.
+
+### Workload containers inside a sandbox
+
+Use `sudo env XDG_RUNTIME_DIR=/run/user/0 podman --storage-driver=vfs --events-backend=file` consistently for
+build/run/exec so all commands use the same sandbox-local store. For builds use
+`build --isolation=chroot --network=host`. For runs add
+`run --cgroups=disabled --network=host` (or `--network=none` for offline work).
+The sandbox cgroup filesystem is read-only; host networking here means the
+sandbox network. VFS avoids nested overlay mounts at the cost of more
+storage and copying. Use fully qualified image references and pinned dependencies.
+The launcher installs Podman through apt; first connection needs package-network
+access and fails if installation or the Podman store check fails. Package-manager
+lock conflicts retry every five seconds for up to 60 attempts; other apt errors
+fail immediately. The launcher recreates Podman runtime directories on reconnect.
+
+These updates apply to newly generated projects. Existing projects retain their
+tracked launcher and agent instructions; migrate those files explicitly rather
+than rerunning setup over conflicting files. Published downloads retain their old
+behavior until rebuilt and released.
 
 ### Visual Studio Code is not found
 

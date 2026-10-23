@@ -153,6 +153,8 @@ the bundled runtime launcher. Verify this behavior with:
 go test ./...
 bash scripts/test-self-contained.sh
 bash scripts/test-daemon-autostart.sh
+bash scripts/test-podman-workflow.sh
+python3 scripts/test-apt-lock-retry.py
 ```
 
 The self-contained test provides an empty mock skills clone and requires all
@@ -163,8 +165,9 @@ without rerunning setup.
 Test every executable on a clean, supported 64-bit Windows 11 system. Verify the
 unsupported-Windows and disabled-hypervisor failures, prerequisite diagnostics,
 interactive prompts, Git clone, project setup, sandbox connection, extension
-installation, and VS Code opening. Python and R tests require a working Docker
-engine; Bioinformatics Sandbox must work with `sbx` without Docker Desktop.
+installation, and VS Code opening. Python and R tests require a working host Podman
+machine; Bioinformatics Sandbox must work without host Podman. Verify Podman
+build/run/exec inside each sandbox; no launcher requires Docker Desktop.
 
 Then mount the DMG and verify that:
 

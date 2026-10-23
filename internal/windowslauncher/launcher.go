@@ -25,7 +25,7 @@ type Config struct {
 	ShellLauncher  string
 	VersionPrompt  string
 	NeedsVersion   bool
-	NeedsDocker    bool
+	NeedsPodman    bool
 	DefaultVersion string
 }
 
@@ -67,7 +67,7 @@ func Main(config Config) {
 }
 
 func execute(config Config) error {
-	deps, err := checkDependencies(config.NeedsDocker)
+	deps, err := checkDependencies(config.NeedsPodman)
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func execute(config Config) error {
 	return run(config, deps, selection)
 }
 
-func checkDependencies(needsDocker bool) (dependencies, error) {
+func checkDependencies(needsPodman bool) (dependencies, error) {
 	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
 		return dependencies{}, errors.New("this executable requires 64-bit Windows on an Intel or AMD processor")
 	}
@@ -118,12 +118,12 @@ func checkDependencies(needsDocker bool) (dependencies, error) {
 	if err := runVisible(sbx, "diagnose"); err != nil {
 		return dependencies{}, fmt.Errorf("Docker Sandboxes diagnostics failed after SSH setup; confirm virtualization is enabled and run 'sbx login': %w", err)
 	}
-	if needsDocker {
-		docker, err := requireCommand("docker.exe", "This sandbox requires Docker Desktop running Linux containers. Install Docker Desktop and start it.")
+	if needsPodman {
+		podman, err := requireCommand("podman.exe", "Install Podman, then run podman machine init (once) and podman machine start.")
 		if err != nil {
 			return dependencies{}, err
 		}
-		if err := checkDockerDaemon(docker); err != nil {
+		if err := checkPodmanConnection(podman); err != nil {
 			return dependencies{}, err
 		}
 	}
@@ -543,17 +543,17 @@ func requireCommand(name, help string) (string, error) {
 	return path, nil
 }
 
-func checkDockerDaemon(docker string) error {
-	output, err := exec.Command(docker, "info", "--format", "{{.OSType}}").CombinedOutput()
+func checkPodmanConnection(podman string) error {
+	output, err := exec.Command(podman, "info", "--format", "{{.Host.OS}}").CombinedOutput()
 	if err != nil {
 		detail := strings.TrimSpace(string(output))
 		if detail == "" {
 			detail = err.Error()
 		}
-		return fmt.Errorf("the Docker daemon is unavailable; start Docker Desktop and retry: %s", detail)
+		return fmt.Errorf("Podman is unavailable; run podman machine init (once) and podman machine start, then retry: %s", detail)
 	}
 	if strings.ToLower(strings.TrimSpace(string(output))) != "linux" {
-		return fmt.Errorf("Docker Desktop must use Linux containers; detected %q", strings.TrimSpace(string(output)))
+		return fmt.Errorf("Podman must use Linux containers; detected %q", strings.TrimSpace(string(output)))
 	}
 	return nil
 }
