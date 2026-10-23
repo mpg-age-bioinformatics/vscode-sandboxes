@@ -22,6 +22,8 @@ func TestMaterializeSandboxBundles(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, relative := range []string{
+				"LICENSE",
+				"THIRD-PARTY-NOTICES.txt",
 				filepath.Join("scripts", "setup-project.sh"),
 				filepath.Join("assets", test.runtime),
 				filepath.Join("assets", ".instructions.md"),

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	licensing "github.com/mpg-age-bioinformatics/vscode-sandboxes"
 	"github.com/mpg-age-bioinformatics/vscode-sandboxes/internal/launcherbundle"
 )
 
@@ -40,6 +41,10 @@ type dependencies struct {
 }
 
 func Main(config Config) {
+	if len(os.Args) == 2 && os.Args[1] == "--licenses" {
+		fmt.Print(licensing.License, "\n", licensing.ThirdPartyNotices)
+		return
+	}
 	fmt.Println(config.AppName)
 	fmt.Println(strings.Repeat("=", len(config.AppName)))
 	fmt.Println()

@@ -1,0 +1,129 @@
+Third-party notices for VS Code Sandboxes
+=========================================
+
+The project's MIT license covers its original code and documentation only.
+Third-party components retain their own copyrights, licenses, and trademarks.
+
+Windows executables include Go runtime and standard-library code. The following
+notices accompany those executables, including the project runners they create.
+The Go toolchain used for the currently distributed Windows builds is Go 1.27.0.
+Review these notices when changing the toolchain or adding dependencies.
+
+Go runtime and standard library (BSD-3-Clause)
+https://go.dev/LICENSE
+https://github.com/golang/go/tree/go1.27.0
+
+Copyright 2009 The Go Authors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google LLC nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Go runtime memory-copy implementation (MIT)
+https://github.com/golang/go/blob/go1.27.0/src/runtime/memmove_amd64.s
+
+Derived from Inferno's libkern/memmove-386.s (adapted for amd64)
+https://bitbucket.org/inferno-os/inferno-os/src/master/libkern/memmove-386.s
+
+        Copyright © 1994-1999 Lucent Technologies Inc. All rights reserved.
+        Revisions Copyright © 2000-2007 Vita Nuova Holdings Limited (www.vitanuova.com).  All rights reserved.
+        Portions Copyright 2009 The Go Authors. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+Go math routines derived from Sun fdlibm (Sun permissive notices)
+https://github.com/golang/go/tree/go1.27.0/src/math
+
+Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+
+Developed at SunPro, a Sun Microsystems, Inc. business.
+Permission to use, copy, modify, and distribute this
+software is freely granted, provided that this notice
+is preserved.
+
+Copyright (C) 2004 by Sun Microsystems, Inc. All rights reserved.
+
+Permission to use, copy, modify, and distribute this
+software is freely granted, provided that this notice
+is preserved.
+
+Build tools
+-----------
+go-winres v0.3.3 and winres use the Zero-Clause BSD license (0BSD).
+They generate Windows resources; their tool executables are not distributed
+with this project. Resources use this project's supplied application icons.
+https://github.com/tc-hib/go-winres/blob/v0.3.3/LICENSE
+https://github.com/tc-hib/winres/blob/master/LICENSE
+
+Installed software and container images
+--------------------------------------
+Git, Podman, Docker Sandboxes, Python, R, R packages, VS Code, VS Code extensions,
+and coding-agent software are installed or obtained separately on the user's
+machine or inside their sandbox. They are not relicensed under this project's
+MIT license. Their licenses, terms, notices, and any subscription requirements
+continue to apply. The dependency set can vary with user-selected versions.
+
+Container recipes preserve runtime-stage package notices and package-version
+inventories under /usr/local/share/licenses/vscode-sandboxes/ in the resulting
+image. These are not a substitute for corresponding source when a component's
+license requires it. Before redistributing built images, inventory their exact
+contents and satisfy each component's notice and source obligations. Publishing
+a Dockerfile alone does not provide all third-party corresponding source.
+
+Trademarks and artwork
+----------------------
+Python and the Python logos are trademarks or registered trademarks of the
+Python Software Foundation. The Python application icon is a stylized derivative
+used to identify this freely distributed tool for the Python programming language.
+It is not an official PSF logo. Trademark permissions are governed separately:
+https://www.python.org/psf/trademarks/
+Commercial uses of derived logos may require PSF permission; this project's MIT
+license does not grant that permission. Replace the derived logo or obtain any
+required permission before such use.
+
+The R application icon is a stylized letter R, not the official R Foundation
+R-and-ellipse logo. This project does not distribute that official logo or claim
+rights to it. If official artwork is introduced, preserve its separate license:
+https://www.r-project.org/logo/
+
+VS Code Sandboxes is an independent project. References to Python, R, Docker,
+Podman, Visual Studio Code, and coding-agent products identify compatibility;
+they do not imply sponsorship, endorsement, or affiliation with their owners.

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	licensing "github.com/mpg-age-bioinformatics/vscode-sandboxes"
 )
 
 func TestIsUNCPath(t *testing.T) {
@@ -79,5 +81,25 @@ func TestEnsureJSONCStringSettingPreservesExplicitSetting(t *testing.T) {
 	}
 	if string(data) != original {
 		t.Fatal("settings file changed")
+	}
+}
+
+// Notices must remain available on unsupported hosts and before any setup UI.
+func TestLicensesFlagBypassesSetup(t *testing.T) {
+	output, err := os.CreateTemp(t.TempDir(), "licenses-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer output.Close()
+	previousArgs, previousStdout := os.Args, os.Stdout
+	os.Args, os.Stdout = []string{"Run Python Sandbox.exe", "--licenses"}, output
+	defer func() { os.Args, os.Stdout = previousArgs, previousStdout }()
+	Main(Config{})
+	got, err := os.ReadFile(output.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != licensing.License+"\n"+licensing.ThirdPartyNotices {
+		t.Fatal("--licenses did not print both complete license documents")
 	}
 }

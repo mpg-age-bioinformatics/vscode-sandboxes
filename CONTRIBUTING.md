@@ -204,6 +204,7 @@ gh release create v1.0.1 \
   r-sandbox/assets/R-Sandbox.exe \
   bioinformatics-sandbox/assets/Bioinformatics-Sandbox.dmg \
   bioinformatics-sandbox/assets/Bioinformatics-Sandbox.exe \
+  LICENSE THIRD-PARTY-NOTICES.txt \
   --verify-tag --latest \
   --title "VS Code Sandboxes 1.0.1" \
   --notes-file /path/to/release-notes.md
@@ -217,3 +218,35 @@ users download the matching EXE directly.
 Use the next appropriate version in place of `1.0.1`. After publishing, verify
 that all six release downloads match the tested local files and that the release
 is marked as the latest stable version.
+
+## License and dependency notices
+
+Keep `LICENSE` and `THIRD-PARTY-NOTICES.txt` with every release, including releases
+containing only one platform. Upload both documents as release assets and link
+the notices in the release notes. Preserve existing notices when modifying or
+redistributing third-party components.
+
+macOS build scripts include both documents in the disk image and application.
+Windows launchers embed them and expose them with `--licenses`; generated Windows
+project runners retain the embedded documents. The generated macOS Python runner
+also carries the documents in its Resources directory.
+
+When changing the Go toolchain, review its main license and component-specific
+notices (including runtime and math sources) and update the third-party notices.
+A permissive project license does not replace those notices.
+
+The Python and R image recipes preserve runtime-stage package documentation and
+an inventory of package and source-package versions under
+`/usr/local/share/licenses/vscode-sandboxes/`. Some upstream images omit
+documentation or contain dangling documentation symlinks. This archive preserves what is available; it does not certify complete
+license coverage. Restore any missing notices before redistribution.
+Preserve these directories and the final base image's license documentation. Built images are not release assets.
+Before publishing an image, audit its complete, resolved dependency set and supply
+any required corresponding source; a package inventory or upstream URL alone is
+not sufficient for every license.
+
+The Python icon is a derived trademark used for a freely distributed Python tool.
+Follow the PSF trademark policy separately from the MIT license, especially for
+commercial redistribution. Do not imply endorsement by upstream projects. Adding
+official R logo artwork requires its own license and attribution; the current
+letter-R artwork is not the official R-and-ellipse logo.

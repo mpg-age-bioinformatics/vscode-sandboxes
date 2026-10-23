@@ -36,7 +36,7 @@ else
 fi
 
 # Expose only the two approved remote skills, including for existing clones.
-git -C skills sparse-checkout set --no-cone /match-code-data/ /set-vscode-r-version/
+git -C skills sparse-checkout set --no-cone /LICENSE /match-code-data/ /set-vscode-r-version/
 git -C skills checkout
 
 install_if_absent_or_identical() {
@@ -67,7 +67,15 @@ chmod +x code/run-bioinformatics-sandbox.sh
 generated_agent="$(mktemp)"
 trap 'rm -f "$generated_agent"' EXIT
 printf '%s\n' "$agent" > "$generated_agent"
-setup_paths=(.vscode/settings.json .vscode/extensions.json .gitignore .gitattributes AGENTS.md .instructions.md code/run-bioinformatics-sandbox.sh)
+# Keep the launcher's notices with generated code without licensing user code.
+notice_root="$skill_dir"
+if [[ ! -f "$notice_root/LICENSE" ]]; then
+  # Direct development invocation from the tracked vendored bundle.
+  notice_root="$skill_dir/../../../.."
+fi
+install_if_absent_or_identical "$notice_root/LICENSE" code/VS-Code-Sandboxes-LICENSE.txt
+install_if_absent_or_identical "$notice_root/THIRD-PARTY-NOTICES.txt" code/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt
+setup_paths=(.vscode/settings.json .vscode/extensions.json .gitignore .gitattributes AGENTS.md .instructions.md code/run-bioinformatics-sandbox.sh code/VS-Code-Sandboxes-LICENSE.txt code/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt)
 if [[ -n "$project_runner_source" ]]; then
   [[ -f "$project_runner_source" ]] || { echo "Error: bundled Windows project runner is unavailable: $project_runner_source" >&2; exit 1; }
   [[ "$project_runner_agent" == "$agent" ]] || { echo "Error: bundled Windows project runner agent does not match the setup selection." >&2; exit 1; }

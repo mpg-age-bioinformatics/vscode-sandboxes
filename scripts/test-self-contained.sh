@@ -49,6 +49,8 @@ run_case() {
     "$bundle/scripts/setup-project.sh" "${args[@]}" >/dev/null
 
   [[ -f "$project/skills/EMPTY_SKILLS_CLONE" ]]
+  cmp "$repository_root/LICENSE" "$project/code/VS-Code-Sandboxes-LICENSE.txt"
+  cmp "$repository_root/THIRD-PARTY-NOTICES.txt" "$project/code/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt"
   case "$slug" in
     python-sandbox)
       runner_name="Run Python Sandbox.exe"

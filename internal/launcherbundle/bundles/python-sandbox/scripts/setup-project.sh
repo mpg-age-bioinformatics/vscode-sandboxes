@@ -38,7 +38,7 @@ else
 fi
 
 # Expose only the two approved remote skills, including for existing clones.
-git -C skills sparse-checkout set --no-cone /match-code-data/ /set-vscode-r-version/
+git -C skills sparse-checkout set --no-cone /LICENSE /match-code-data/ /set-vscode-r-version/
 git -C skills checkout
 
 install_if_absent_or_identical() {
@@ -72,7 +72,15 @@ install_if_absent_or_identical "$skill_dir/assets/windows-venv-sitecustomize.py"
 install_if_absent_or_identical "$generated_command" code/run-python-sandbox.command
 chmod +x code/run-python-sandbox.sh
 chmod 755 code/run-python-sandbox.command
-setup_paths=(.vscode/settings.json .vscode/extensions.json .gitignore .gitattributes AGENTS.md .instructions.md code/Dockerfile code/run-python-sandbox.sh code/windows-venv-sitecustomize.py code/run-python-sandbox.command)
+# Keep the launcher's notices with generated code without licensing user code.
+notice_root="$skill_dir"
+if [[ ! -f "$notice_root/LICENSE" ]]; then
+  # Direct development invocation from the tracked vendored bundle.
+  notice_root="$skill_dir/../../../.."
+fi
+install_if_absent_or_identical "$notice_root/LICENSE" code/VS-Code-Sandboxes-LICENSE.txt
+install_if_absent_or_identical "$notice_root/THIRD-PARTY-NOTICES.txt" code/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt
+setup_paths=(.vscode/settings.json .vscode/extensions.json .gitignore .gitattributes AGENTS.md .instructions.md code/Dockerfile code/run-python-sandbox.sh code/windows-venv-sitecustomize.py code/run-python-sandbox.command code/VS-Code-Sandboxes-LICENSE.txt code/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt)
 if [[ -n "$project_runner_source" ]]; then
   [[ -f "$project_runner_source" ]] || { echo "Error: bundled Windows project runner is unavailable: $project_runner_source" >&2; exit 1; }
   [[ "$project_runner_agent" == "$agent" ]] || { echo "Error: bundled Windows project runner agent does not match the setup selection." >&2; exit 1; }
@@ -86,6 +94,11 @@ if [[ -n "$project_app_template" ]]; then
   install_if_absent_or_identical "$project_app_template/Contents/Info.plist" "code/Run Python Sandbox.app/Contents/Info.plist"
   install_if_absent_or_identical "$project_app_template/Contents/MacOS/run-python-sandbox" "code/Run Python Sandbox.app/Contents/MacOS/run-python-sandbox"
   install_if_absent_or_identical "$project_app_icon" "code/Run Python Sandbox.app/Contents/Resources/PythonSandbox.icns"
+  for notice in LICENSE THIRD-PARTY-NOTICES.txt; do
+    if [[ -f "$project_app_template/Contents/Resources/$notice" ]]; then
+      install_if_absent_or_identical "$project_app_template/Contents/Resources/$notice" "code/Run Python Sandbox.app/Contents/Resources/$notice"
+    fi
+  done
   chmod 755 "code/Run Python Sandbox.app/Contents/MacOS/run-python-sandbox"
   setup_paths+=("code/Run Python Sandbox.app")
 fi

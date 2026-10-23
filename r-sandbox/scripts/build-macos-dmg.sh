@@ -32,6 +32,11 @@ read_write_dmg="$build_root/R-Sandbox-rw.dmg"
 mkdir -p "$staging_dir"
 cp -R "$app_path" "$staging_dir/R Sandbox.app"
 cp -R "$bundle_path" "$staging_dir/R Sandbox.app/Contents/Resources/Setup"
+for notice in LICENSE THIRD-PARTY-NOTICES.txt; do
+  cp "$repository_root/$notice" "$staging_dir/$notice"
+  cp "$repository_root/$notice" "$staging_dir/R Sandbox.app/Contents/Resources/$notice"
+  cp "$repository_root/$notice" "$staging_dir/R Sandbox.app/Contents/Resources/Setup/$notice"
+done
 chmod 755 "$staging_dir/R Sandbox.app/Contents/Resources/Setup/scripts/setup-project.sh" \
   "$staging_dir/R Sandbox.app/Contents/Resources/Setup/assets/run-r-sandbox.sh"
 ln -s /Applications "$staging_dir/Applications"

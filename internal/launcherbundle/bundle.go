@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	licensing "github.com/mpg-age-bioinformatics/vscode-sandboxes"
 )
 
 //go:embed all:bundles
@@ -18,7 +20,7 @@ func Materialize(slug, destination string) error {
 	if err != nil {
 		return fmt.Errorf("open embedded %s setup bundle: %w", slug, err)
 	}
-	return fs.WalkDir(bundle, ".", func(path string, entry fs.DirEntry, walkErr error) error {
+	err = fs.WalkDir(bundle, ".", func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -39,4 +41,16 @@ func Materialize(slug, destination string) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	for filename, text := range map[string]string{
+		"LICENSE":                 licensing.License,
+		"THIRD-PARTY-NOTICES.txt": licensing.ThirdPartyNotices,
+	} {
+		if err := os.WriteFile(filepath.Join(destination, filename), []byte(text), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
 }

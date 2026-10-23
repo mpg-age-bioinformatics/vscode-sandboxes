@@ -555,3 +555,37 @@ The R sandbox prepares vscode-R's exact bundled `sess` revision in the remote
 extension's private managed library before opening VS Code. Interactive R startup
 rechecks it after extension updates; completed revisions require no reinstall or
 installation prompt. Editor infrastructure stays separate from project renv packages.
+
+## License
+
+This project's original code and documentation are licensed under the
+[MIT License](LICENSE). You may use, modify, redistribute, sublicense, and sell
+copies, including for commercial purposes, provided you retain the copyright
+and license notices.
+
+The software is provided as is, without warranty. The license disclaims
+liability of the authors and copyright holders for claims, damages, and other
+liability arising from the software or its use. See [LICENSE](LICENSE) for the
+full terms.
+
+Third-party software, dependencies, container images, and services installed,
+downloaded, or used by these tools remain subject to their respective licenses
+and terms. This project's license does not replace those terms or grant rights
+to third-party trademarks.
+
+Dependency notices and trademark information are in
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Windows launchers built from
+this revision also display both license documents with `--licenses`, without
+starting setup. macOS disk images include both documents at the top level and
+inside each application's `Contents/Resources/` directory.
+
+This is an independent project and is not endorsed by the owners of the tools
+it supports. Python and the Python logos are trademarks or registered trademarks
+of the Python Software Foundation. The Python icon is a stylized derivative;
+commercial reuse may require separate permission under the
+[PSF trademark policy](https://www.python.org/psf/trademarks/).
+
+Generated projects retain these notices in `code/VS-Code-Sandboxes-LICENSE.txt`
+and `code/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt`. These cover the supplied
+launcher code and its dependencies; they do not choose a license for your own
+project code.

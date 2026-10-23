@@ -14,6 +14,17 @@ RUN Rscript -e 'install.packages(c("BiocManager", "remotes"), repos="https://clo
     grep -Ev '/(ld-linux|libc\.so|libm\.so|libpthread\.so|libdl\.so|librt\.so|libresolv\.so)' | \
     sort -u | xargs -r -I{} cp -L {} /opt/rocker-r-libs/
 
+# Preserve notices from the runtime stage as well as the copied runtime itself.
+# Keep these separate from the final base image's notices to avoid overwrites.
+USER root
+RUN mkdir -p /opt/runtime-licenses/packages && \
+    cp -a /usr/share/doc/. /opt/runtime-licenses/packages/ && \
+    dpkg-query -W -f='${binary:Package}\t${Version}\t${source:Package}\t${source:Version}\n' > /opt/runtime-licenses/packages.tsv && \
+    for directory in /usr/local/share/doc /usr/local/share/licenses; do \
+      if [ ! -d "$directory" ]; then continue; fi; \
+      cp -a "$directory" "/opt/runtime-licenses/$(basename "$directory")"; \
+    done
+
 FROM docker.io/docker/sandbox-templates:${AGENT_TEMPLATE}
 ARG LANGUAGESERVER_VERSION
 USER root
@@ -47,6 +58,7 @@ COPY --from=r_runtime /usr/local/bin/R /usr/local/bin/R
 COPY --from=r_runtime /usr/local/bin/Rscript /usr/local/bin/Rscript
 COPY --from=r_runtime /opt/rocker-r-libs/ /opt/rocker-r-libs/
 ENV LD_LIBRARY_PATH=/opt/rocker-r-libs
+COPY --from=r_runtime /opt/runtime-licenses/ /usr/local/share/licenses/vscode-sandboxes/r-runtime/
 USER agent
 RUN R --version && \
     R CMD config CC && \

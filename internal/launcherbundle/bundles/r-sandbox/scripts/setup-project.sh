@@ -36,7 +36,7 @@ else
 fi
 
 # Expose only the two approved remote skills, including for existing clones.
-git -C skills sparse-checkout set --no-cone /match-code-data/ /set-vscode-r-version/
+git -C skills sparse-checkout set --no-cone /LICENSE /match-code-data/ /set-vscode-r-version/
 git -C skills checkout
 
 install_if_absent_or_identical() {
@@ -56,7 +56,15 @@ printf '%s\n' "$agent" > "$generated_agent"
 install_if_absent_or_identical "$generated_dockerfile" code/Dockerfile
 install_if_absent_or_identical "$skill_dir/assets/run-r-sandbox.sh" code/run-r-sandbox.sh
 chmod +x code/run-r-sandbox.sh
-setup_paths=(.Rprofile code/activate-project.R code/setup-renv.R code/verify-renv.R code/setup-vscode-r.R .vscode/settings.json .vscode/extensions.json .gitignore .gitattributes .Renviron AGENTS.md .instructions.md code/Dockerfile code/run-r-sandbox.sh)
+# Keep the launcher's notices with generated code without licensing user code.
+notice_root="$skill_dir"
+if [[ ! -f "$notice_root/LICENSE" ]]; then
+  # Direct development invocation from the tracked vendored bundle.
+  notice_root="$skill_dir/../../../.."
+fi
+install_if_absent_or_identical "$notice_root/LICENSE" code/VS-Code-Sandboxes-LICENSE.txt
+install_if_absent_or_identical "$notice_root/THIRD-PARTY-NOTICES.txt" code/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt
+setup_paths=(.Rprofile code/activate-project.R code/setup-renv.R code/verify-renv.R code/setup-vscode-r.R .vscode/settings.json .vscode/extensions.json .gitignore .gitattributes .Renviron AGENTS.md .instructions.md code/Dockerfile code/run-r-sandbox.sh code/VS-Code-Sandboxes-LICENSE.txt code/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt)
 if [[ -n "$project_runner_source" ]]; then
   [[ -f "$project_runner_source" ]] || { echo "Error: bundled Windows project runner is unavailable: $project_runner_source" >&2; exit 1; }
   [[ "$project_runner_agent" == "$agent" ]] || { echo "Error: bundled Windows project runner agent does not match the setup selection." >&2; exit 1; }
