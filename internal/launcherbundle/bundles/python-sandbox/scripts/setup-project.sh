@@ -34,8 +34,12 @@ if [[ -e skills ]]; then
   existing_origin="$(git -C skills remote get-url origin 2>/dev/null || true)"
   [[ "$existing_origin" == "$skills_repository" ]] || { echo "Error: skills/ has a different origin: ${existing_origin:-<none>}" >&2; exit 1; }
 else
-  git -c core.autocrlf=false clone "$skills_repository" skills
+  git -c core.autocrlf=false clone --no-checkout "$skills_repository" skills
 fi
+
+# Expose only the two approved remote skills, including for existing clones.
+git -C skills sparse-checkout set --no-cone /match-code-data/ /set-vscode-r-version/
+git -C skills checkout
 
 install_if_absent_or_identical() {
   local source_path="$1" destination_path="$2"
@@ -108,7 +112,27 @@ else
   done < "$skill_dir/assets/gitattributes"
 fi
 
+# Keep the policy last so prior allow rules cannot re-include data directories.
+if [[ "$(tail -n 1 .gitignore)" != 'data*/' ]]; then
+  printf '\ndata*/\n' >> .gitignore
+fi
+if ! grep -Fq '<!-- sandbox:repository-policy:start -->' AGENTS.md; then
+  sed -n '/<!-- sandbox:repository-policy:start -->/,/<!-- sandbox:repository-policy:end -->/p' "$skill_dir/assets/AGENTS.md" >> AGENTS.md
+fi
+
 git init
+hooks_dir="$(git rev-parse --git-path hooks)"
+mkdir -p "$hooks_dir"
+if [[ -f "$hooks_dir/pre-commit" ]] && ! cmp -s "$skill_dir/assets/pre-commit" "$hooks_dir/pre-commit"; then
+  if [[ ! -e "$hooks_dir/pre-commit.before-sandbox" ]]; then
+    mv "$hooks_dir/pre-commit" "$hooks_dir/pre-commit.before-sandbox"
+  else
+    echo "Error: cannot preserve existing pre-commit hook." >&2
+    exit 1
+  fi
+fi
+cp "$skill_dir/assets/pre-commit" "$hooks_dir/pre-commit"
+chmod +x "$hooks_dir/pre-commit"
 if git rev-parse --verify HEAD >/dev/null 2>&1; then
   git add -f -A -- "${setup_paths[@]}"
   if git diff --cached --quiet -- "${setup_paths[@]}"; then

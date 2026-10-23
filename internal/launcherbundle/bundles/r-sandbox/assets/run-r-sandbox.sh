@@ -174,7 +174,7 @@ fi
 
 native_exec "$code_cli" --install-extension ms-vscode-remote.remote-ssh --force
 remote_authority="ssh-remote+${sandbox_name}.sbx"
-required_extensions=(REditorSupport.r RDebugger.r-debugger quarto.quarto openai.chatgpt anthropic.claude-code)
+required_extensions=(REditorSupport.r RDebugger.r-debugger quarto.quarto openai.chatgpt anthropic.claude-code Continue.continue)
 for extension in "${required_extensions[@]}"; do
   native_exec "$code_cli" --remote "$remote_authority" --install-extension "$extension" --force
 done
@@ -187,5 +187,8 @@ for extension in "${required_extensions[@]}"; do
     exit 1
   fi
 done
+
+# Prepare the exact sess source bundled with the newly installed extension.
+native_exec sbx exec --env "R_LIBS_USER=$sandbox_r_library" --workdir "$sandbox_project_root" "$sandbox_name" Rscript --vanilla code/setup-vscode-r.R
 
 native_exec "$code_cli" --remote "$remote_authority" "$sandbox_project_root"

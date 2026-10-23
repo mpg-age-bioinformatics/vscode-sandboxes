@@ -8,5 +8,5 @@
   "workbench.startupEditor": "none",
   "terminal.integrated.defaultProfile.linux": "bash",
   "extensions.ignoreRecommendations": true,
-  "remote.SSH.defaultExtensions": ["REditorSupport.r", "RDebugger.r-debugger", "quarto.quarto", "openai.chatgpt", "anthropic.claude-code"]
+  "remote.SSH.defaultExtensions": ["REditorSupport.r", "RDebugger.r-debugger", "quarto.quarto", "openai.chatgpt", "anthropic.claude-code", "Continue.continue"]
 }

@@ -8,8 +8,8 @@ language runtime, and selected coding agent in an isolated sandbox.
 
 The downloadable launchers are self-contained. Their setup scripts, runtime
 launchers, templates, and editor configuration are packaged from this repository.
-Setup still clones the separate `skills/` repository into the generated project
-for Codex and Claude to discover, but launcher setup and execution never load or
+Setup uses a sparse checkout of the separate `skills/` repository containing only
+`match-code-data` and `set-vscode-r-version` for Codex and Claude to discover, but launcher setup and execution never load or
 copy launcher files from that clone.
 
 ## Contents
@@ -389,7 +389,7 @@ The selected project directory contains:
 project/
 ├── code/       # Source code, notebooks, launcher, and container recipe
 ├── data/       # Project data
-├── skills/     # Cloned agent skills; ignored by Git and not launcher source
+├── skills/     # Only match-code-data and set-vscode-r-version; ignored by Git
 ├── .vscode/    # VS Code configuration
 ├── AGENTS.md
 └── .git/
@@ -546,3 +546,12 @@ file, then retry. Back up important work before changing an existing project.
 
 Build, testing, pull-request, and GitHub Release instructions are in
 [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Directories whose names start with `data` are ignored at every depth, including
+`data/` and `data_<hash>/`. Project agent instructions prohibit adding them, and
+a pre-commit guard rejects tracked data files even after a force-add.
+
+The R sandbox prepares vscode-R's exact bundled `sess` revision in the remote
+extension's private managed library before opening VS Code. Interactive R startup
+rechecks it after extension updates; completed revisions require no reinstall or
+installation prompt. Editor infrastructure stays separate from project renv packages.

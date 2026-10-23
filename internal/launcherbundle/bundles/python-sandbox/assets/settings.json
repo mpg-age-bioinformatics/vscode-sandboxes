@@ -4,5 +4,5 @@
   "python.testing.pytestEnabled": true,
   "python.testing.unittestEnabled": false,
   "python.analysis.typeCheckingMode": "basic",
-  "remote.SSH.defaultExtensions": ["ms-python.python", "ms-python.vscode-pylance", "ms-toolsai.jupyter", "charliermarsh.ruff", "REditorSupport.r", "openai.chatgpt", "anthropic.claude-code"]
+  "remote.SSH.defaultExtensions": ["ms-python.python", "ms-python.vscode-pylance", "ms-toolsai.jupyter", "charliermarsh.ruff", "REditorSupport.r", "openai.chatgpt", "anthropic.claude-code", "Continue.continue"]
 }

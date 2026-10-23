@@ -1,2 +1,11 @@
 # Start R from the project root; scripts can source code/activate-project.R too.
 source("code/activate-project.R")
+
+# Recheck bundled sess after extension updates before the watcher attaches.
+if (interactive()) {
+  local({
+    status <- system2(file.path(R.home("bin"), "Rscript"),
+                      c("--vanilla", "code/setup-vscode-r.R"))
+    if (status != 0L) warning("vscode-R session watcher setup failed; see the installation output")
+  })
+}

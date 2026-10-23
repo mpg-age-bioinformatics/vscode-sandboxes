@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+while IFS= read -r -d '' path; do
+  case "$path" in
+    data*/*|*/data*/*)
+      printf 'Error: data* directories must never be committed: %s\n' "$path" >&2
+      exit 1
+      ;;
+  esac
+done < <(git ls-files -z)
+previous_hook="$(git rev-parse --git-path hooks)/pre-commit.before-sandbox"
+if [[ -x "$previous_hook" ]]; then
+  "$previous_hook" "$@"
+fi

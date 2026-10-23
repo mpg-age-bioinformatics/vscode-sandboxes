@@ -32,8 +32,12 @@ if [[ -e skills ]]; then
   existing_origin="$(git -C skills remote get-url origin 2>/dev/null || true)"
   [[ "$existing_origin" == "$skills_repository" ]] || { echo "Error: skills/ has a different origin: ${existing_origin:-<none>}" >&2; exit 1; }
 else
-  git -c core.autocrlf=false clone "$skills_repository" skills
+  git -c core.autocrlf=false clone --no-checkout "$skills_repository" skills
 fi
+
+# Expose only the two approved remote skills, including for existing clones.
+git -C skills sparse-checkout set --no-cone /match-code-data/ /set-vscode-r-version/
+git -C skills checkout
 
 install_if_absent_or_identical() {
   local source_path="$1" destination_path="$2"
@@ -52,7 +56,7 @@ printf '%s\n' "$agent" > "$generated_agent"
 install_if_absent_or_identical "$generated_dockerfile" code/Dockerfile
 install_if_absent_or_identical "$skill_dir/assets/run-r-sandbox.sh" code/run-r-sandbox.sh
 chmod +x code/run-r-sandbox.sh
-setup_paths=(.Rprofile code/activate-project.R code/setup-renv.R code/verify-renv.R .vscode/settings.json .vscode/extensions.json .gitignore .gitattributes .Renviron AGENTS.md .instructions.md code/Dockerfile code/run-r-sandbox.sh)
+setup_paths=(.Rprofile code/activate-project.R code/setup-renv.R code/verify-renv.R code/setup-vscode-r.R .vscode/settings.json .vscode/extensions.json .gitignore .gitattributes .Renviron AGENTS.md .instructions.md code/Dockerfile code/run-r-sandbox.sh)
 if [[ -n "$project_runner_source" ]]; then
   [[ -f "$project_runner_source" ]] || { echo "Error: bundled Windows project runner is unavailable: $project_runner_source" >&2; exit 1; }
   [[ "$project_runner_agent" == "$agent" ]] || { echo "Error: bundled Windows project runner agent does not match the setup selection." >&2; exit 1; }
@@ -72,7 +76,7 @@ elif ! grep -Fq '<!-- r-sandbox:scientific-libraries:start -->' AGENTS.md; then
 fi
 install_if_absent_or_identical "$skill_dir/assets/Renviron" .Renviron
 install_if_absent_or_identical "$skill_dir/assets/Rprofile" .Rprofile
-for script in activate-project.R setup-renv.R verify-renv.R; do
+for script in activate-project.R setup-renv.R verify-renv.R setup-vscode-r.R; do
   install_if_absent_or_identical "$skill_dir/assets/$script" "code/$script"
 done
 
@@ -94,7 +98,27 @@ else
   done < "$skill_dir/assets/gitattributes"
 fi
 
+# Keep the policy last so prior allow rules cannot re-include data directories.
+if [[ "$(tail -n 1 .gitignore)" != 'data*/' ]]; then
+  printf '\ndata*/\n' >> .gitignore
+fi
+if ! grep -Fq '<!-- sandbox:repository-policy:start -->' AGENTS.md; then
+  sed -n '/<!-- sandbox:repository-policy:start -->/,/<!-- sandbox:repository-policy:end -->/p' "$skill_dir/assets/AGENTS.md" >> AGENTS.md
+fi
+
 git init
+hooks_dir="$(git rev-parse --git-path hooks)"
+mkdir -p "$hooks_dir"
+if [[ -f "$hooks_dir/pre-commit" ]] && ! cmp -s "$skill_dir/assets/pre-commit" "$hooks_dir/pre-commit"; then
+  if [[ ! -e "$hooks_dir/pre-commit.before-sandbox" ]]; then
+    mv "$hooks_dir/pre-commit" "$hooks_dir/pre-commit.before-sandbox"
+  else
+    echo "Error: cannot preserve existing pre-commit hook." >&2
+    exit 1
+  fi
+fi
+cp "$skill_dir/assets/pre-commit" "$hooks_dir/pre-commit"
+chmod +x "$hooks_dir/pre-commit"
 if git rev-parse --verify HEAD >/dev/null 2>&1; then
   git add -f -A -- "${setup_paths[@]}"
   if git diff --cached --quiet -- "${setup_paths[@]}"; then

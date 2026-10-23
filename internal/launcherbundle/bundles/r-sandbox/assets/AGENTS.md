@@ -52,3 +52,8 @@ if (display_plot) {
 - Use `merge_legends = TRUE` and sufficient right padding for both saved and interactive heatmaps. Close only file devices after saving; inspect rendered PNG/PDF visually for legend overlap, clipped titles, and readable labels.
 - Keep `r.alwaysUseActiveTerminal` and `r.bracketedPaste` false for standard R. Bracketed paste is recommended for radian. The R banner and “Project loaded [renv …]” are normal output; do not attribute uncaptured disappearing notifications to them.
 - Track setup code, `renv.lock`, `renv/activate.R`, `renv/settings.json`, configuration, and intended demo CSVs and rendered artifacts. Exclude installed libraries and caches. Do not rerun scaffolding for ordinary analysis or editor changes.
+
+<!-- sandbox:repository-policy:start -->
+- Never stage, force-add, or commit any directory whose name starts with `data`, at any depth, or any of its contents (including `data/` and `data_<hash>/`). Keep the `data*/` ignore rule and the data commit guard enabled. If data is already tracked, remove it from the Git index with `git rm --cached` while preserving the files on disk.
+- Keep only `match-code-data` and `set-vscode-r-version` from the remote skills repository in `skills/`. Do not install or restore other remote skills.
+<!-- sandbox:repository-policy:end -->

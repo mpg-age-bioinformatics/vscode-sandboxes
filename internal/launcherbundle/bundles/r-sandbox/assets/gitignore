@@ -12,8 +12,10 @@
 !/renv/activate.R
 !/renv/settings.json
 !/renv/.gitignore
-!/data/
 /.r-library/
 /renv/library/
 /renv/staging/
 /renv/cache/
+
+# Data directories and versioned data archives at every depth.
+data*/

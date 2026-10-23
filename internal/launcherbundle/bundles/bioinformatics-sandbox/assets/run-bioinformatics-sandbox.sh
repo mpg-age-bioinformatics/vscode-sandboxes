@@ -161,7 +161,7 @@ fi
 
 native_exec "$code_cli" --install-extension ms-vscode-remote.remote-ssh
 remote_authority="ssh-remote+${sandbox_name}.sbx"
-required_extensions=(ms-python.python ms-python.vscode-pylance ms-toolsai.jupyter REditorSupport.r openai.chatgpt anthropic.claude-code)
+required_extensions=(ms-python.python ms-python.vscode-pylance ms-toolsai.jupyter REditorSupport.r openai.chatgpt anthropic.claude-code Continue.continue)
 for extension in "${required_extensions[@]}"; do
   native_exec "$code_cli" --remote "$remote_authority" --install-extension "$extension"
 done
