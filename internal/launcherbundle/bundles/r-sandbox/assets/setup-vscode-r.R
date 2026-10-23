@@ -1,5 +1,6 @@
 # Run inside the sandbox with Rscript --vanilla code/setup-vscode-r.R.
-# Editor infrastructure belongs in vscode-R's private library, outside renv.
+# sess itself belongs in vscode-R's private library; its dependencies use renv.
+source("code/activate-project.R")
 local({
   roots <- unique(c(Sys.getenv("VSCODE_AGENT_FOLDER", unset = ""),
                     path.expand("~/.vscode-server"),
@@ -33,7 +34,11 @@ local({
           identical(readLines(ready, warn = FALSE), revision) &&
           !is.null(api$sess_find_source_library(revision, library))
       }
-      if (complete()) next
+      if (complete()) {
+        # Metadata and a ready marker cannot prove dependencies are loadable.
+        api$sess_load_namespace(library, revision)
+        next
+      }
       dir.create(parent, recursive = TRUE, showWarnings = FALSE)
       lock <- file.path(parent, ".setup-lock")
       deadline <- Sys.time() + 300
@@ -50,6 +55,7 @@ local({
           } else {
             api$sess_verify_package(library, description[1L, "Version"], revision, FALSE)
           }
+          api$sess_load_namespace(library, revision)
           temporary <- tempfile(".ready-", tmpdir = parent)
           writeLines(revision, temporary, useBytes = TRUE)
           Sys.chmod(temporary, "0600")
