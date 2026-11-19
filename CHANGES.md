@@ -2,6 +2,33 @@
 
 Detailed changes, validation results, testing limitations, and checksums for each release.
 
+<a id="v1-1-2"></a>
+
+## v1.1.2 — 2026-11-19
+
+### Changes
+
+- Give the macOS DMG a visual drag-to-Applications installation guide: the sandbox app on the left, an arrow in the middle, and the Applications folder on the right. Include brief instructions and keep license documents accessible below.
+- Render the background at 1x and 2x resolution and save the Finder icon positions, background, and window settings before compressing the disk image.
+- Keep GitHub release descriptions concise, with detailed changes and checksums in dated sections of this file. State missing Windows installation/end-to-end testing directly on the release page as well.
+
+### Validation
+
+Built on macOS 27.0.1. `go test ./...`, `go vet ./...`, all JavaScript UI regressions, packaging shell syntax checks, and compilation of the Finder layout AppleScript passed. The installation window was visually checked in Finder during preparation, including correction of the Retina background scaling. The final v1.1.2 disk image checksum, saved Finder metadata and background, application version, Applications shortcut, license notices, and 87 embedded setup files were verified. The Windows executable was cross-compiled and checked as an x86-64 PE executable with version 1.1.2 metadata.
+
+A clean Windows 11 installation and end-to-end run have not been completed. Full interactive first-run testing was not repeated for this packaging update. R project setup and restart orchestration are covered by the fixture-based Go tests; a live R session and the dedicated R session regression were not run. The Python and shell workflow regression suites passed for v1.1.1 and were not repeated for this packaging-only update.
+
+### SHA-256 checksums
+
+```
+36b4cff42aae223104ce6141e878c1720997c810b05a584e922a0bca58545795  VS-Code-Sandboxes.dmg
+fd8ae6b36e7512eef9a32aed6fcdc3c25d94bed9deba225f5f231067373e57ee  VS-Code-Sandboxes.exe
+b66258f4eeb4bb82f9da208d547c195d46f8535e96750d8720a43058e3c4cf0a  LICENSE
+834ba0988f75c64008c47983a7cb55c0aaedc25ea56dafd2e1da37728f55ae66  THIRD-PARTY-NOTICES.txt
+```
+
+[Full changes](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/compare/v1.1.1...v1.1.2)
+
 <a id="v1-1-1"></a>
 
 ## v1.1.1 — 2026-11-19

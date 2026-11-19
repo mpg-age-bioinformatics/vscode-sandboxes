@@ -173,6 +173,8 @@ build/run/exec inside each sandbox; no launcher requires Docker Desktop.
 Then mount the DMG and verify that:
 
 - the Finder window contains the application and an `Applications` shortcut;
+- the unified DMG opens in icon view with the app on the left, Applications on
+  the right, and a drag-to-install arrow and instructions between them;
 - dragging the application into `Applications` succeeds;
 - the application starts by double-clicking it;
 - workspace settings, network confirmation, and live activity work in the startup window;
@@ -200,6 +202,9 @@ a brief summary, download names, the versioned README link and unsigned/notarize
 status, a link to the release's dated section in `CHANGES.md`, and license/notice
 links. Put detailed changes, tested operating systems, validation results, testing
 limitations, SHA-256 checksums, and the comparison link in `CHANGES.md` instead.
+Also state missing Windows installation/end-to-end testing directly on the
+release page whenever those checks have not been completed; do not hide that
+limitation behind the detailed-changes link.
 Use a version-and-date heading and a stable version anchor for each entry. For
 existing tags that predate `CHANGES.md`, link to the documentation commit containing
 that entry; never move a published tag to add the file. Verify that uploaded
@@ -213,6 +218,11 @@ the notices in the release notes. Preserve existing notices when modifying or
 redistributing third-party components.
 
 macOS build scripts include both documents in the disk image and application.
+The unified DMG builder renders its installation background from
+`internal/desktop/DMGBackground.swift` at 1x and 2x resolution and saves the
+Finder window layout with `sandbox-launcher/scripts/layout-dmg.applescript`
+before compressing the final image. Its hidden background and `.DS_Store` are
+packaging metadata and must survive conversion to the read-only image.
 Windows launchers embed them and expose them with `--licenses`; generated Windows
 project runners retain the embedded documents. Generated macOS project runners
 also carry the documents in their Resources directories.
