@@ -2,7 +2,7 @@
 set -euo pipefail
 
 target_dir="${1:-}"
-agent="${2:-}"
+agent="${2:-both}"
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 skill_dir="$(dirname -- "$script_dir")"
 skills_repository="${BIOINFORMATICS_SANDBOX_SKILLS_REPOSITORY:-https://github.com/mpg-age-bioinformatics/skills.git}"
@@ -12,34 +12,21 @@ project_app_template="${VSCODE_SANDBOX_PROJECT_APP_TEMPLATE:-}"
 project_app_icon="${VSCODE_SANDBOX_PROJECT_APP_ICON:-}"
 
 if [[ -z "$target_dir" || "$target_dir" != /* || ! -d "$target_dir" ]]; then
-  echo "Usage: setup-project.sh <absolute-existing-project-directory> <codex|claude>" >&2
+  echo "Usage: setup-project.sh <absolute-existing-project-directory> [both]" >&2
   exit 2
 fi
 case "$agent" in
-  codex|claude) ;;
-  *) echo "Error: agent must be codex or claude." >&2; exit 2 ;;
+  both|codex|claude) ;;
+  *) echo "Error: unsupported legacy agent argument." >&2; exit 2 ;;
 esac
 
 cd "$target_dir"
-mkdir -p code data .vscode
+mkdir -p code/.sandbox data .vscode
 
-if [[ -e skills ]]; then
-  if [[ ! -d skills/.git ]]; then
-    echo "Error: skills/ already exists and is not a Git clone." >&2
-    exit 1
-  fi
-  existing_origin="$(git -C skills remote get-url origin 2>/dev/null || true)"
-  if [[ "$existing_origin" != "$skills_repository" ]]; then
-    echo "Error: skills/ has a different origin: ${existing_origin:-<none>}" >&2
-    exit 1
-  fi
-else
-  git -c core.autocrlf=false clone --no-checkout "$skills_repository" skills
-fi
-
-# Expose only the two approved remote skills, including for existing clones.
-git -C skills sparse-checkout set --no-cone /LICENSE /match-code-data/ /set-vscode-r-version/
-git -C skills checkout
+skills_setup="$skill_dir/assets/setup-skills.sh"
+if [[ ! -f "$skills_setup" ]]; then skills_setup="$skill_dir/../common/assets/setup-skills.sh"; fi
+source "$skills_setup"
+setup_sandbox_skills "$skills_repository"
 
 install_if_absent_or_identical() {
   local source_path="$1"
@@ -50,6 +37,7 @@ install_if_absent_or_identical() {
       exit 1
     fi
   else
+    mkdir -p "$(dirname -- "$destination_path")"
     cp "$source_path" "$destination_path"
   fi
 }
@@ -62,10 +50,16 @@ elif ! grep -Fq '<!-- bioinformatics-sandbox:scientific-libraries:start -->' AGE
     "$skill_dir/assets/AGENTS.md" >> AGENTS.md
 fi
 install_if_absent_or_identical "$skill_dir/assets/.instructions.md" .instructions.md
+shared_assets="$skill_dir/assets"
+if [[ ! -f "$shared_assets/install-coding-agents.sh" ]]; then shared_assets="$skill_dir/../common/assets"; fi
+install_if_absent_or_identical "$shared_assets/install-coding-agents.sh" code/.sandbox/install-coding-agents.sh
+for shared in prepare-continue.py install-continue.js setup-continue.sh; do
+  install_if_absent_or_identical "$shared_assets/$shared" "code/.sandbox/$shared"
+done
 install_if_absent_or_identical "$skill_dir/assets/extensions.json" .vscode/extensions.json
 install_if_absent_or_identical "$skill_dir/assets/settings.json" .vscode/settings.json
-install_if_absent_or_identical "$skill_dir/assets/run-bioinformatics-sandbox.sh" code/run-bioinformatics-sandbox.sh
-chmod +x code/run-bioinformatics-sandbox.sh
+install_if_absent_or_identical "$skill_dir/assets/run-bioinformatics-sandbox.sh" code/.sandbox/run-bioinformatics-sandbox.sh
+chmod +x code/.sandbox/run-bioinformatics-sandbox.sh
 generated_agent="$(mktemp)"
 trap 'rm -f "$generated_agent"' EXIT
 printf '%s\n' "$agent" > "$generated_agent"
@@ -75,34 +69,34 @@ if [[ ! -f "$notice_root/LICENSE" ]]; then
   # Direct development invocation from the tracked vendored bundle.
   notice_root="$skill_dir/../../../.."
 fi
-install_if_absent_or_identical "$notice_root/LICENSE" code/VS-Code-Sandboxes-LICENSE.txt
-install_if_absent_or_identical "$notice_root/THIRD-PARTY-NOTICES.txt" code/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt
-setup_paths=(.vscode/settings.json .vscode/extensions.json .gitignore .gitattributes AGENTS.md .instructions.md code/run-bioinformatics-sandbox.sh code/VS-Code-Sandboxes-LICENSE.txt code/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt)
+install_if_absent_or_identical "$notice_root/LICENSE" code/.sandbox/VS-Code-Sandboxes-LICENSE.txt
+install_if_absent_or_identical "$notice_root/THIRD-PARTY-NOTICES.txt" code/.sandbox/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt
+setup_paths=(code/.sandbox/prepare-continue.py code/.sandbox/install-continue.js code/.sandbox/setup-continue.sh code/.sandbox/install-coding-agents.sh .vscode/settings.json .vscode/extensions.json .gitignore .gitattributes AGENTS.md .instructions.md code/.sandbox/run-bioinformatics-sandbox.sh code/.sandbox/VS-Code-Sandboxes-LICENSE.txt code/.sandbox/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt)
 if [[ -n "$project_runner_source" ]]; then
   [[ -f "$project_runner_source" ]] || { echo "Error: bundled Windows project runner is unavailable: $project_runner_source" >&2; exit 1; }
   [[ "$project_runner_agent" == "$agent" ]] || { echo "Error: bundled Windows project runner agent does not match the setup selection." >&2; exit 1; }
-  install_if_absent_or_identical "$project_runner_source" "code/Run Bioinformatics Sandbox.exe"
-  install_if_absent_or_identical "$generated_agent" code/.bioinformatics-sandbox-agent
-  setup_paths+=("code/Run Bioinformatics Sandbox.exe" code/.bioinformatics-sandbox-agent)
+  install_if_absent_or_identical "$project_runner_source" "code/.sandbox/Run Bioinformatics Sandbox.exe"
+  install_if_absent_or_identical "$generated_agent" code/.sandbox/.bioinformatics-sandbox-agent
+  setup_paths+=("code/.sandbox/Run Bioinformatics Sandbox.exe" code/.sandbox/.bioinformatics-sandbox-agent)
 fi
 
 if [[ -n "$project_app_template" ]]; then
-  install_if_absent_or_identical "$generated_agent" code/.bioinformatics-sandbox-agent
-  setup_paths+=(code/.bioinformatics-sandbox-agent)
+  install_if_absent_or_identical "$generated_agent" code/.sandbox/.bioinformatics-sandbox-agent
+  setup_paths+=(code/.sandbox/.bioinformatics-sandbox-agent)
   [[ -d "$project_app_template" && -f "$project_app_icon" ]] || { echo "Error: bundled macOS project launcher is incomplete." >&2; exit 1; }
-  mkdir -p "code/Run Bioinformatics Sandbox.app/Contents/MacOS" "code/Run Bioinformatics Sandbox.app/Contents/Resources"
-  install_if_absent_or_identical "$project_app_template/Contents/Info.plist" "code/Run Bioinformatics Sandbox.app/Contents/Info.plist"
-  install_if_absent_or_identical "$project_app_template/Contents/MacOS/run-bioinformatics-sandbox" "code/Run Bioinformatics Sandbox.app/Contents/MacOS/run-bioinformatics-sandbox"
-  install_if_absent_or_identical "$project_app_icon" "code/Run Bioinformatics Sandbox.app/Contents/Resources/BioinformaticsSandbox.icns"
+  mkdir -p "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/MacOS" "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/Resources"
+  install_if_absent_or_identical "$project_app_template/Contents/Info.plist" "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/Info.plist"
+  install_if_absent_or_identical "$project_app_template/Contents/MacOS/run-bioinformatics-sandbox" "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/MacOS/run-bioinformatics-sandbox"
+  install_if_absent_or_identical "$project_app_icon" "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/Resources/BioinformaticsSandbox.icns"
   for notice in LICENSE THIRD-PARTY-NOTICES.txt; do
-    install_if_absent_or_identical "$notice_root/$notice" "code/Run Bioinformatics Sandbox.app/Contents/Resources/$notice"
+    install_if_absent_or_identical "$notice_root/$notice" "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/Resources/$notice"
   done
   for binary in "Sandbox Desktop" "Sandbox Window"; do
-    install_if_absent_or_identical "${VSCODE_SANDBOX_DESKTOP_RESOURCES:-$project_app_template/Contents/Resources}/$binary" "code/Run Bioinformatics Sandbox.app/Contents/Resources/$binary"
-    chmod 755 "code/Run Bioinformatics Sandbox.app/Contents/Resources/$binary"
+    install_if_absent_or_identical "${VSCODE_SANDBOX_DESKTOP_RESOURCES:-$project_app_template/Contents/Resources}/$binary" "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/Resources/$binary"
+    chmod 755 "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/Resources/$binary"
   done
-  chmod 755 "code/Run Bioinformatics Sandbox.app/Contents/MacOS/run-bioinformatics-sandbox"
-  setup_paths+=("code/Run Bioinformatics Sandbox.app")
+  chmod 755 "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/MacOS/run-bioinformatics-sandbox"
+  setup_paths+=("code/.sandbox/Run Bioinformatics Sandbox.app")
 fi
 
 if [[ ! -e .gitignore ]]; then
@@ -132,6 +126,8 @@ if ! grep -Fq '<!-- sandbox:repository-policy:start -->' AGENTS.md; then
 fi
 
 git init
+if [[ -z "$(git config user.name || true)" ]]; then git config user.name 'Sandbox Launcher'; fi
+if [[ -z "$(git config user.email || true)" ]]; then git config user.email 'sandbox@localhost'; fi
 hooks_dir="$(git rev-parse --git-path hooks)"
 mkdir -p "$hooks_dir"
 if [[ -f "$hooks_dir/pre-commit" ]] && ! cmp -s "$skill_dir/assets/pre-commit" "$hooks_dir/pre-commit"; then

@@ -7,10 +7,9 @@ import tempfile
 
 root = Path(__file__).resolve().parents[1]
 helpers = []
-for language in ('python', 'r', 'bioinformatics'):
+for language in ('bioinformatics',):
     source = (root / f'internal/launcherbundle/bundles/{language}-sandbox/assets/run-{language}-sandbox.sh').read_text()
     helpers.append(source.split('    apt_with_lock_retry() {', 1)[1].split('\n  fi', 1)[0])
-assert helpers[0] == helpers[1] == helpers[2], 'Sandbox apt helpers differ'
 script = 'set -e\napt_with_lock_retry() {' + helpers[0]
 
 with tempfile.TemporaryDirectory() as directory:

@@ -1,7 +1,10 @@
 package startui
 
 import (
+	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -60,10 +63,17 @@ func TestRestrictedNetworkRemovesKitExtrasAndKeepsGuardUntilReady(t *testing.T) 
 	s := selection()
 	s.Network = "restricted"
 	s.Sites = "example.com, models.example.org"
+	// Saved lists for other types and bundled defaults must never add hidden access.
+	s.SiteLists = map[string]string{"r-sandbox": "cloud.r-project.org", "python-sandbox": "pypi.org"}
 	if err := applyNetwork("test-sandbox", s, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	got := trace(t, path)
+	for _, hidden := range []string{"pypi.org", "cloud.r-project.org", "registry-1.docker.io"} {
+		if strings.Contains(got, "policy allow network --sandbox test-sandbox "+hidden) {
+			t.Fatal("allowed a host absent from the displayed list:", hidden)
+		}
+	}
 	for _, want := range []string{"policy deny network --sandbox test-sandbox api.openai.com", "policy allow network --sandbox test-sandbox models.example.org", "policy rm network --sandbox test-sandbox --resource **"} {
 		if !strings.Contains(got, want) {
 			t.Error("missing", want, "in", got)
@@ -180,6 +190,10 @@ func TestEndpointInstallationRestoresSandboxConfiguration(t *testing.T) {
 	os.MkdirAll(filepath.Join(remote, ".codex"), 0700)
 	config := filepath.Join(remote, ".codex", "config.toml")
 	os.WriteFile(config, []byte("model = 'original-model'\n"), 0600)
+	originalContinue := "name: Existing Continue settings\nversion: 1.0.0\nschema: v1\nmodels: []\n"
+	os.MkdirAll(filepath.Join(remote, ".continue"), 0700)
+	os.WriteFile(filepath.Join(remote, ".continue", "config.yaml"), []byte(originalContinue), 0600)
+
 	mock := filepath.Join(filepath.Dir(os.Getenv("TRACE")), "sbx")
 	original, err := os.ReadFile(mock)
 	if err != nil {
@@ -195,30 +209,48 @@ func TestEndpointInstallationRestoresSandboxConfiguration(t *testing.T) {
 fi
 case "$1 ${2:-}" in`, 1)
 	os.WriteFile(mock, []byte(script), 0755)
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"data":[{"id":"private-model"},{"id":"other-private-model"}]}`)
+	}))
+	defer gateway.Close()
 	private := filepath.Join(t.TempDir(), "private.toml")
-	os.WriteFile(private, []byte("model = 'private-model'\n"), 0600)
+	os.WriteFile(private, []byte("model = 'private-model'\nmodel_provider = 'company'\n[model_providers.company]\nbase_url = '"+gateway.URL+"/v1'\n"), 0600)
 	s := selection()
 	s.Endpoint = "private"
 	s.ConfigFile = private
-	s.Network = "none"
+	s.Token = "sandbox-key"
+	s.Network = "open"
 	for i := 0; i < 2; i++ {
 		if err := applyStartup("test-sandbox", "codex", s, io.Discard); err != nil {
 			t.Fatal(err)
 		}
 	}
 	data, _ := os.ReadFile(config)
-	if !strings.Contains(string(data), "private-model") {
+	if strings.Contains(string(data), "private-model") || strings.Contains(string(data), "sandbox-key") {
 		t.Fatal(string(data))
+	}
+	continuePath := filepath.Join(remote, ".continue", "config.yaml")
+	continueData, err := os.ReadFile(continuePath)
+	if err != nil || !strings.Contains(string(continueData), "other-private-model") || !strings.Contains(string(continueData), "sandbox-key") {
+		t.Fatal("Continue was not configured", err)
+	}
+	if strings.Contains(string(data), "model_catalog_json") {
+		t.Fatal("Codex retained a private catalog")
 	}
 	info, _ := os.Stat(config)
 	if info.Mode().Perm() != 0600 {
 		t.Fatal("sandbox config is not private")
 	}
 	s.Endpoint = "default"
+	s.ConfigFile = ""
 	if err := applyStartup("test-sandbox", "codex", s, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	data, _ = os.ReadFile(config)
+	restoredContinue, err := os.ReadFile(continuePath)
+	if err != nil || string(restoredContinue) != originalContinue {
+		t.Fatal("default connection did not restore Continue settings", err)
+	}
 	if string(data) != "model = 'original-model'\n" {
 		t.Fatal("did not restore original:", string(data))
 	}

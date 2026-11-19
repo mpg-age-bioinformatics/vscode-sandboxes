@@ -50,24 +50,24 @@ printf 'startup-helper %s\n' "$*" >> "$WORKFLOW_LOG"
 exit 1
 MOCK
 chmod +x "$test_root/bin/"*
-for language in python r bioinformatics; do
+for language in bioinformatics; do
   project="$test_root/$language"
-  mkdir -p "$project/code"
+  mkdir -p "$project/code/.sandbox"
   bundle="$repository_root/internal/launcherbundle/bundles/$language-sandbox/assets"
-  cp "$bundle/run-$language-sandbox.sh" "$project/code/"
+  cp "$bundle/run-$language-sandbox.sh" "$project/code/.sandbox/"
   if [[ -f "$bundle/Dockerfile.template" ]]; then
     sed -e s/__PYTHON_VERSION__/3.13/g -e s/__R_VERSION__/4.5/g "$bundle/Dockerfile.template" > "$project/code/Dockerfile"
   fi
   export WORKFLOW_LOG="$test_root/$language.log"
   export PATH="$test_root/bin:$PATH"
   export PYTHON_SANDBOX_SKIP_VSCODE=1 R_SANDBOX_SKIP_VSCODE=1 BIOINFORMATICS_SANDBOX_SKIP_VSCODE=1
-  bash "$project/code/run-$language-sandbox.sh" codex >/dev/null
+  bash "$project/code/.sandbox/run-$language-sandbox.sh" codex >/dev/null
   grep -F 'sbx exec --user root' "$WORKFLOW_LOG" >/dev/null
   if [[ "$language" != bioinformatics ]]; then
     grep -F 'podman save --format docker-archive' "$WORKFLOW_LOG" >/dev/null
     grep -F 'sbx run --detached --pull never' "$WORKFLOW_LOG" >/dev/null
     : > "$WORKFLOW_LOG"
-    if FAIL_PODMAN=1 bash "$project/code/run-$language-sandbox.sh" codex >/dev/null 2>&1; then
+    if FAIL_PODMAN=1 bash "$project/code/.sandbox/run-$language-sandbox.sh" codex >/dev/null 2>&1; then
       echo 'Unavailable Podman was incorrectly accepted' >&2; exit 1
     fi
     ! grep -F 'sbx run ' "$WORKFLOW_LOG" >/dev/null
@@ -75,13 +75,13 @@ for language in python r bioinformatics; do
     ! grep -F 'podman ' "$WORKFLOW_LOG" >/dev/null
   fi
   : > "$WORKFLOW_LOG"
-  if VSCODE_SANDBOX_STARTUP_HELPER="$test_root/bin/startup-helper" bash "$project/code/run-$language-sandbox.sh" codex >/dev/null 2>&1; then
+  if VSCODE_SANDBOX_STARTUP_HELPER="$test_root/bin/startup-helper" bash "$project/code/.sandbox/run-$language-sandbox.sh" codex >/dev/null 2>&1; then
     echo 'Failed network setup was incorrectly accepted' >&2; exit 1
   fi
   grep -F -- '--deny-network **' "$WORKFLOW_LOG" >/dev/null
   grep -F 'startup-helper --startup-apply' "$WORKFLOW_LOG" >/dev/null
   ! grep -F 'sbx exec --user root' "$WORKFLOW_LOG" >/dev/null
-  if FAIL_BOOTSTRAP=1 bash "$project/code/run-$language-sandbox.sh" codex >/dev/null 2>&1; then
+  if FAIL_BOOTSTRAP=1 bash "$project/code/.sandbox/run-$language-sandbox.sh" codex >/dev/null 2>&1; then
     echo 'Failed sandbox Podman setup was incorrectly accepted' >&2; exit 1
   fi
 done

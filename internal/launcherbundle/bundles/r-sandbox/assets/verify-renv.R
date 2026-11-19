@@ -1,5 +1,5 @@
-# Run inside the sandbox: Rscript code/verify-renv.R
-source("code/activate-project.R")
+# Run inside the sandbox: Rscript code/.sandbox/verify-renv.R
+source("code/.sandbox/activate-project.R")
 expected <- c(languageserver = "0.3.18", httpgd = "2.1.4", jsonlite = "2.0.0",
               later = "1.4.4", rstudioapi = "0.17.1", processx = "3.9.0")
 root <- paste0(normalizePath(".r-library"), "/")

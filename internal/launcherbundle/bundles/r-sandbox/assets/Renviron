@@ -1,5 +1,7 @@
 R_LIBS_USER=.r-library
 RENV_PATHS_LIBRARY=.r-library
-# Working settings for this Remote-SSH environment, not universal renv requirements.
+# Working settings for this development-container environment, not universal renv requirements.
 RENV_CONFIG_INSTALL_TRANSACTIONAL=FALSE
 RENV_CONFIG_CACHE_ENABLED=FALSE
+# Loaded before renv's automatically prepended .Rprofile activation.
+BIOCONDUCTOR_CONFIG_FILE=file://${PWD}/code/.sandbox/bioconductor-config.yaml

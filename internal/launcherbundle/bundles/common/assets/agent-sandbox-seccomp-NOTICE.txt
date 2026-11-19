@@ -1,0 +1,10 @@
+Agent sandbox seccomp profile
+=============================
+Derived from the Moby project's default Docker seccomp profile (Apache-2.0).
+Source: https://github.com/moby/profiles/blob/4ebf927f08370a93ef8eddcfc71370f965a9fb51/seccomp/default.json
+Upstream SHA-256: 3320527d4568265ac97a077609b1bfd4cfd0d789eeb9239b7e094b1526675406
+License: agent-sandbox-seccomp-LICENSE.txt
+Modification: added an unconditional allow rule for clone, unshare, mount,
+umount2, and pivot_root to support Codex/Bubblewrap inside a non-root user
+namespace. Other Docker seccomp rules and container capabilities are unchanged.
+This profile is for development containers inside a Docker Sandbox microVM only.

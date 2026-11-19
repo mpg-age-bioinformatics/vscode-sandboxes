@@ -145,7 +145,7 @@ icon, manifest, and version information. Regenerate them with the build scripts
 whenever an icon or Windows metadata changes.
 
 The initial Windows launcher copies itself to the matching
-`code/Run <Sandbox>.exe` name and writes the selected agent to a companion file.
+`code/.sandbox/Run <Sandbox>.exe` name and writes a compatibility marker (`both`) to a companion file.
 The copied executable recognizes the project-runner filename and directly starts
 the bundled runtime launcher. Verify this behavior with:
 
@@ -165,8 +165,9 @@ without rerunning setup.
 Test every executable on a clean, supported 64-bit Windows 11 system. Verify the
 unsupported-Windows and disabled-hypervisor failures, prerequisite diagnostics,
 interactive prompts, Git clone, project setup, sandbox connection, extension
-installation, and VS Code opening. Python and R tests require a working host Podman
-machine; Bioinformatics Sandbox must work without host Podman. Verify Podman
+installation, and VS Code opening. Python/R tests must run with host Docker and Podman unavailable. Verify the
+standard shell sandbox's Docker Engine, image pull, Dev Containers CLI startup, and
+VS Code's nested SSH/container connection. For general bioinformatics, verify Podman
 build/run/exec inside each sandbox; no launcher requires Docker Desktop.
 
 Then mount the DMG and verify that:
@@ -214,15 +215,11 @@ When changing the Go toolchain, review its main license and component-specific
 notices (including runtime and math sources) and update the third-party notices.
 A permissive project license does not replace those notices.
 
-The Python and R image recipes preserve runtime-stage package documentation and
-an inventory of package and source-package versions under
-`/usr/local/share/licenses/vscode-sandboxes/`. Some upstream images omit
-documentation or contain dangling documentation symlinks. This archive preserves what is available; it does not certify complete
-license coverage. Restore any missing notices before redistribution.
-Preserve these directories and the final base image's license documentation. Built images are not release assets.
-Before publishing an image, audit its complete, resolved dependency set and supply
-any required corresponding source; a package inventory or upstream URL alone is
-not sufficient for every license.
+Python and R now pull complete upstream development images inside the sandbox;
+no runtime binaries are copied between images. Record the resolved image digest
+and preserve the images' original notices. The language images and downloaded
+agent/Dev Containers tooling are not bundled as release assets. Before publishing
+custom images, audit their dependencies and corresponding license requirements.
 
 The Python icon is a derived trademark used for a freely distributed Python tool.
 Follow the PSF trademark policy separately from the MIT license, especially for
@@ -234,7 +231,7 @@ letter-R artwork is not the official R-and-ellipse logo.
 ## Desktop startup controller
 
 `internal/startui` contains the shared local startup window, authenticated
-loopback controller, Codex TOML import, and network policy orchestration.
+loopback controller, private Continue connection setup, and network policy orchestration.
 `internal/desktop/Window.swift` hosts the UI in a native macOS WebKit window.
 Windows runs the same UI in an isolated Edge app window and starts hidden worker
 processes using the existing Go launcher backend.
@@ -244,6 +241,12 @@ apps before opening them. DMG builders run this automatically. Generated helper
 binaries are ignored by Git and are not embedded recursively into setup bundles.
 The project setup copies the desktop helpers into generated macOS project apps.
 Windows release builds use `-H windowsgui` to avoid opening a console.
+
+The unified app uses the startup UI's white striped square on a teal tile as its
+application icon. On macOS, run `bash scripts/build-app-icon.sh` to regenerate
+`sandbox-launcher/assets/SandboxesIcon-1024.png` and the app's `Sandboxes.icns`
+from `scripts/render-app-icon.swift`. The Windows build script embeds the same
+PNG in its executable resources. Rebuild both releases after changing the icon.
 
 Run `go test ./...`, `scripts/test-self-contained.sh`,
 `scripts/test-daemon-autostart.sh`, `scripts/test-podman-workflow.sh`, and
@@ -266,8 +269,8 @@ Use `./scripts/create-release.sh all macos` and
 user downloads. Existing per-language build targets remain compatibility builds.
 
 The shared catalog in `internal/startui/catalog.go` drives the type selector and
-platform dispatchers. Python/R request a language version and host Podman;
-general bioinformatics requests neither. Fixed project runners resolve their
+platform dispatchers. Python/R request a language version and start a standard
+Docker-enabled shell sandbox; no selection requires a host container engine. Fixed project runners resolve their
 sandbox from their own configuration or filename and cannot switch an existing
 workspace's type. The unified macOS package stages all worker commands, icons,
 and self-contained setup bundles under `Resources/Launchers/`; these generated
@@ -276,3 +279,60 @@ payloads are ignored by Git and recreated by `scripts/build-desktop.sh`.
 Build macOS packages with Go and Xcode command-line tools (`swiftc`), and inspect
 all selector choices before publishing. Windows packages can be cross-compiled;
 exercise the Edge app window on Windows before publishing.
+
+
+## Language containers inside a general sandbox
+
+The shared implementation is under `internal/launcherbundle/bundles/common/assets/`.
+`Materialize` merges these assets into Python/R bundles, and macOS packaging stages
+them alongside each language's assets. Direct source setup resolves the same
+shared directory. Keep all three paths covered by self-contained payload tests.
+
+`run-language-sandbox.sh` runs on the host and invokes only sbx, SSH, and VS Code.
+`start-development-container.sh` runs inside the sandbox and uses its Docker
+Engine plus pinned Dev Containers CLI. Image-based `code/.sandbox/devcontainer.json`
+configurations replace the old multi-stage sandbox-image recipes. Development
+containers get their own non-root user and volumes for home and language packages;
+the project remains host-backed. Record the base-image digest and Dev Containers
+feature lockfile in code. No Docker socket is mounted into the development container.
+
+Run `bash scripts/test-development-container-workflow.sh` to reject host Docker or
+Podman calls and verify policy failures stop before container startup. Run
+`python3 scripts/test-development-container-config.py` for digest pinning, proxy and
+credential mount configuration, image-cache reuse, and nested VS Code URI encoding.
+The Go bundle tests verify the shared assets are embedded on Windows. Existing
+bioinformatics Podman/apt checks remain applicable only to that sandbox type.
+Run `python3 scripts/test-r-system-packages.py` to check that cached R system
+libraries require no package-network access and incompatible locks fail clearly.
+
+For a real integration test, create a disposable shell sandbox with a temporary
+workspace. Verify both language containers, their runtime versions, both agent CLIs,
+private-config mounts, offline cache reuse, and the selected network policy.
+Remove only the named disposable sandbox afterwards. The general bioinformatics
+workflow and existing user sandboxes must remain unaffected.
+
+Run `python3 scripts/test-coding-agents.py` to verify that both CLIs are installed,
+remain on terminal PATH, and reopen without reinstalling cached packages.
+
+Run `node scripts/test-site-presets.js` for language-specific site switching,
+custom edits, saved-state migration, and restoring defaults. Preset host changes
+should also pass `go test ./internal/startui` and be checked against vendor docs.
+
+Run `node scripts/test-connection-ui.js` for automatic OpenAI/private connection
+selection, paired URL/key validation, startup without connection files, and masked key retention after startup. Run
+`node scripts/test-endpoint-network-ui.js` for automatic endpoint allowlisting and
+offline validation. Keys must never appear in persistent launcher preferences or
+project files. The Go model-discovery tests use local HTTP servers to verify
+Bearer headers, URL paths, response limits, and redirects without sending
+credentials to external services.
+
+The local Continue execution setting uses `github.com/tailscale/hujson` (BSD-3-Clause)
+to preserve JSONC comments and unrelated VS Code settings. Its tests cover existing
+overrides, invalid files, and idempotent startup.
+
+Project reuse and initial Git baselines are covered by the project-state Go tests.
+These verify one clean initial commit, preservation of staged user edits on
+restarts, restoration of language/version, and rejection of stale success records.
+Run `node scripts/test-activity-export-ui.js` for native/browser export behavior.
+The development-container config tests also verify that resumed containers skip
+initialization but still run environment checks.

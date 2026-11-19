@@ -1,6 +1,6 @@
-# Run inside the sandbox: Rscript code/setup-renv.R
+# Run inside the sandbox: Rscript code/.sandbox/setup-renv.R
 # ---- Activate project ----
-source("code/activate-project.R")
+source("code/.sandbox/activate-project.R")
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 if (!file.exists("renv/activate.R")) {
   utils::install.packages(
@@ -41,5 +41,5 @@ local({
 })
 renv::snapshot(type = "all", prompt = FALSE)
 # Verify resolution in a fresh process, including after restoring a lockfile.
-status <- system2(file.path(R.home("bin"), "Rscript"), "code/verify-renv.R")
+status <- system2(file.path(R.home("bin"), "Rscript"), "code/.sandbox/verify-renv.R")
 if (status != 0L) stop("Fresh-process project library verification failed")

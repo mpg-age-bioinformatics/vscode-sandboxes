@@ -2,6 +2,9 @@ package startui
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,15 +19,42 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// The startup card accepts only a URL and a separate key. Legacy saved file/model
+// fields cannot override the displayed inputs.
+func directConnection(s Selection) Selection {
+	s.ConfigFile, s.Model = "", ""
+	s.ConfigOverrides = false
+	s.BaseURL, s.Token = strings.TrimSpace(s.BaseURL), strings.TrimSpace(s.Token)
+	s.Endpoint = "default"
+	if s.BaseURL != "" || s.Token != "" {
+		s.Endpoint = "private"
+	}
+	return s
+}
+
 func Validate(s Selection) error {
+	if err := validateSettings(s); err != nil {
+		return err
+	}
+	if s.Endpoint == "private" && strings.TrimSpace(s.Token) == "" {
+		return errors.New("Enter an API key for the private endpoint.")
+	}
+	return nil
+}
+
+// Connection files contain settings only and can be saved without a startup key.
+func validateSettings(s Selection) error {
 	if !filepath.IsAbs(s.Project) {
 		return errors.New("Choose an absolute project folder.")
 	}
-	if s.Agent != "codex" && s.Agent != "claude" {
-		return errors.New("Choose Codex or Claude Code.")
+	if s.Agent != "both" && s.Agent != "codex" && s.Agent != "claude" {
+		return errors.New("Invalid agent configuration.")
 	}
 	if s.Network != "none" && s.Network != "restricted" && s.Network != "open" {
 		return errors.New("Choose an internet setting.")
+	}
+	if s.Endpoint == "private" && s.Network == "none" {
+		return errors.New(privateOfflineMessage)
 	}
 	if s.Network == "restricted" {
 		if _, err := sites(s.Sites); err != nil {
@@ -34,10 +64,13 @@ func Validate(s Selection) error {
 	if s.Endpoint != "default" && s.Endpoint != "private" {
 		return errors.New("Choose an endpoint.")
 	}
+	if s.ConfigFile != "" && !filepath.IsAbs(s.ConfigFile) {
+		return errors.New("Use an absolute TOML file path.")
+	}
+	if s.ConfigFile != "" && configInProject(s.Project, s.ConfigFile) {
+		return errors.New("Keep the source TOML outside the shared project folder so agents cannot access its original authentication.")
+	}
 	if s.Endpoint == "private" {
-		if s.Agent != "codex" {
-			return errors.New("Private endpoints apply to Codex.")
-		}
 		if s.ConfigFile != "" {
 			if !filepath.IsAbs(s.ConfigFile) {
 				return errors.New("Use an absolute TOML file path.")
@@ -46,9 +79,6 @@ func Validate(s Selection) error {
 			u, err := url.Parse(s.BaseURL)
 			if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
 				return errors.New("Enter an HTTP or HTTPS endpoint URL without embedded credentials.")
-			}
-			if s.Model == "" {
-				return errors.New("Enter the model ID served by your endpoint.")
 			}
 		}
 	}
@@ -72,32 +102,58 @@ func sites(input string) ([]string, error) {
 	}
 	return result, nil
 }
-func defaultCodexConfig() string {
-	saved := filepath.Join(settingsDir(), "endpoints", "private.toml")
-	if _, err := os.Stat(saved); err == nil {
-		return saved
-	}
-	home := os.Getenv("CODEX_HOME")
-	if home == "" {
-		u, _ := os.UserHomeDir()
-		home = filepath.Join(u, ".codex")
-	}
-	path := filepath.Join(home, "config.toml")
-	if data, err := os.ReadFile(path); err == nil {
-		var c map[string]any
-		if toml.Unmarshal(data, &c) == nil {
-			p, _ := c["model_provider"].(string)
-			if p != "" && p != "openai" || c["openai_base_url"] != nil {
-				return path
-			}
-		}
-	}
-	return ""
+
+type configPreview struct {
+	Model    string `json:"model"`
+	BaseURL  string `json:"baseURL"`
+	Private  bool   `json:"private"`
+	Revision string `json:"revision"`
 }
 
-// endpointConfig imports the complete TOML document, preserving query parameters
-// and custom headers. Environment credentials are resolved on the host and stored
-// as user-only static settings so Remote-SSH and the Codex extension see them too.
+func previewCodexConfig(path string) (configPreview, error) {
+	var preview configPreview
+	if !filepath.IsAbs(path) {
+		return preview, errors.New("Use an absolute TOML file path.")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return preview, fmt.Errorf("Read Codex TOML file: %w", err)
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, (1<<20)+1))
+	if err != nil {
+		return preview, err
+	}
+	if len(data) > 1<<20 {
+		return preview, errors.New("The Codex TOML file exceeds 1 MiB.")
+	}
+	var config map[string]any
+	if err := toml.Unmarshal(data, &config); err != nil {
+		return preview, errors.New("The selected file is not valid TOML.")
+	}
+	preview.Revision = fmt.Sprintf("%x", sha256.Sum256(data))
+	preview.Model, _ = config["model"].(string)
+	provider, _ := config["model_provider"].(string)
+	preview.BaseURL, _ = config["openai_base_url"].(string)
+	if provider != "" && provider != "openai" {
+		preview.Private = true
+		providers, _ := config["model_providers"].(map[string]any)
+		selected, _ := providers[provider].(map[string]any)
+		preview.BaseURL, _ = selected["base_url"].(string)
+	}
+	preview.Private = preview.Private || preview.BaseURL != ""
+	if preview.BaseURL != "" {
+		u, err := url.Parse(preview.BaseURL)
+		if err != nil || u.User != nil {
+			return configPreview{}, errors.New("Use an endpoint URL without embedded credentials.")
+		}
+		preview.BaseURL = cleanConnectionURL(u)
+	}
+	return preview, nil
+}
+
+// endpointConfig imports portable connection settings, never source authentication.
+// Only a separate key explicitly entered for this startup may be added at runtime.
 func endpointConfig(s Selection) ([]byte, error) {
 	var c map[string]any
 	if s.ConfigFile != "" {
@@ -113,6 +169,31 @@ func endpointConfig(s Selection) ([]byte, error) {
 		if s.Token != "" {
 			c["model_providers"].(map[string]any)["sandbox_private"].(map[string]any)["experimental_bearer_token"] = s.Token
 		}
+	}
+	if s.Endpoint == "default" {
+		// The endpoint selector chooses the built-in OpenAI connection even when
+		// this same source file selects a private provider. Never copy its URL,
+		// authentication, or private model/routing alias into default mode.
+		connection := map[string]any{}
+		provider, _ := c["model_provider"].(string)
+		base, _ := c["openai_base_url"].(string)
+		if (provider == "" || provider == "openai") && base == "" {
+			if model, ok := c["model"]; ok {
+				connection["model"] = model
+			}
+		}
+		for _, key := range []string{"model_reasoning_effort", "model_reasoning_summary", "model_verbosity"} {
+			if value, ok := c[key]; ok {
+				connection[key] = value
+			}
+		}
+		return toml.Marshal(connection)
+	}
+	if s.ConfigFile != "" && s.ConfigOverrides {
+		if c == nil {
+			c = map[string]any{}
+		}
+		applyConnectionEdits(c, s)
 	}
 	provider, _ := c["model_provider"].(string)
 	if provider == "" || provider == "openai" {
@@ -140,51 +221,35 @@ func endpointConfig(s Selection) ([]byte, error) {
 	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
 		return nil, errors.New("The selected provider needs an HTTP(S) base_url without embedded credentials.")
 	}
-	if model, _ := c["model"].(string); model == "" {
-		return nil, errors.New("The TOML file must include a model ID.")
-	}
-	if p["auth"] != nil || p["gateway_oauth"] != nil {
-		return nil, errors.New("This endpoint uses a host authentication helper or OAuth. Configure sandbox-compatible authentication in a separate TOML file first.")
-	}
-	if required, _ := p["requires_openai_auth"].(bool); required {
-		return nil, errors.New("The private provider requires OpenAI authentication. Use a provider with independent endpoint authentication.")
-	}
-	if key, ok := p["env_key"].(string); ok && key != "" {
-		value := s.Token
-		if value == "" {
-			value = os.Getenv(key)
+	// Rebuild the provider from a connection-only allowlist. Do not copy bearer
+	// tokens, headers, OAuth/helpers, or values from the host environment.
+	clean := map[string]any{"base_url": cleanConnectionURL(u)}
+	for _, key := range []string{"name", "wire_api", "requires_openai_auth"} {
+		if value, ok := p[key]; ok {
+			clean[key] = value
 		}
-		if value == "" {
-			return nil, fmt.Errorf("The endpoint needs %s. Enter the API key in the startup form, or export that variable before opening the app.", key)
+	}
+	if key, ok := p["env_key"].(string); ok && regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`).MatchString(key) {
+		// This is a variable name only; it must be set separately in the sandbox.
+		clean["env_key"] = key
+	}
+	if query, ok := p["query_params"].(map[string]any); ok {
+		if version, ok := query["api-version"].(string); ok && apiVersion.MatchString(version) {
+			clean["query_params"] = map[string]any{"api-version": version}
 		}
-		delete(p, "env_key")
-		p["experimental_bearer_token"] = value
 	}
 	if s.Token != "" {
-		p["experimental_bearer_token"] = s.Token
+		clean["requires_openai_auth"] = false
+		delete(clean, "env_key")
+		clean["experimental_bearer_token"] = s.Token
 	}
-	if headers, ok := p["env_http_headers"].(map[string]any); ok {
-		static, _ := p["http_headers"].(map[string]any)
-		if static == nil {
-			static = map[string]any{}
-		}
-		for header, key := range headers {
-			env, ok := key.(string)
-			if !ok {
-				return nil, errors.New("Invalid env_http_headers.")
-			}
-			value := os.Getenv(env)
-			if value == "" {
-				return nil, fmt.Errorf("The endpoint header %s needs host environment variable %s.", header, env)
-			}
-			static[header] = value
-		}
-		p["http_headers"] = static
-		delete(p, "env_http_headers")
-	}
+	p = clean
 	// Import connection settings only. Host hooks, MCP processes, and machine
 	// paths in a user's full Codex config are not portable to the sandbox.
-	connection := map[string]any{"model": c["model"], "model_provider": provider, "model_providers": map[string]any{provider: p}}
+	connection := map[string]any{"model_provider": provider, "model_providers": map[string]any{provider: p}}
+	if model, ok := c["model"].(string); ok && strings.TrimSpace(model) != "" {
+		connection["model"] = model
+	}
 	for _, key := range []string{"model_reasoning_effort", "model_reasoning_summary", "model_verbosity"} {
 		if value, ok := c[key]; ok {
 			connection[key] = value
@@ -203,26 +268,66 @@ func Command(name string, args ...string) *exec.Cmd {
 // PrepareEnvironment creates a temporary, private launch manifest, outside the
 // workspace. It is inherited by setup and runtime scripts, never shell-sourced.
 func PrepareEnvironment(s Selection) ([]string, func(), error) {
+	if s.Endpoint == "default" {
+		s.Token = ""
+	}
+	var networkErr error
+	s, _, networkErr = withPrivateEndpointAccess(s)
+	if networkErr != nil {
+		return nil, nil, networkErr
+	}
 	if err := Validate(s); err != nil {
 		return nil, nil, err
 	}
 	if s.Endpoint == "private" {
-		data, err := endpointConfig(s)
+		if err := EnsureContinueWorkspace(); err != nil {
+			return nil, nil, err
+		}
+	}
+	hasConnection := s.ConfigFile != ""
+	var connectionData []byte
+	if hasConnection {
+		connectionOnly := s
+		connectionOnly.Token = ""
+		data, err := endpointConfig(connectionOnly)
 		if err != nil {
 			return nil, nil, err
 		}
-		path := filepath.Join(settingsDir(), "endpoints", "private.toml")
+		name := "default.toml"
+		if s.Endpoint == "private" {
+			name = "private.toml"
+		}
+		path := filepath.Join(settingsDir(), "endpoints", name)
 		if err := privateWrite(path, data); err != nil {
 			return nil, nil, err
 		}
-		s.ConfigFile = path
-		s.Token = ""
+		connectionData = data
+	}
+	s.FreshRepository, s.PreservePaths = false, nil
+	top, repoErr := projectGit(s.Project, "rev-parse", "--show-toplevel")
+	if _, err := projectGit(s.Project, "rev-parse", "HEAD"); err != nil || repoErr != nil || projectKey(top) != projectKey(s.Project) {
+		s.FreshRepository = true
+	}
+	if !s.FreshRepository {
+		for _, path := range runtimeBaselinePaths {
+			if dirty, err := projectGit(s.Project, "status", "--porcelain", "--", path); err == nil && dirty != "" {
+				s.PreservePaths = append(s.PreservePaths, path)
+			}
+		}
 	}
 	dir, err := os.MkdirTemp("", "sandbox-startup-*")
 	if err != nil {
 		return nil, nil, err
 	}
 	cleanup := func() { os.RemoveAll(dir) }
+	if hasConnection {
+		// Concurrent launches must not read each other's cached endpoint.
+		s.ConfigFile = filepath.Join(dir, "connection.toml")
+		if err := privateWrite(s.ConfigFile, connectionData); err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+	}
 	path := filepath.Join(dir, "selection.json")
 	if err := writeJSON(path, s); err != nil {
 		cleanup()
@@ -233,7 +338,14 @@ func PrepareEnvironment(s Selection) ([]string, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	return []string{"VSCODE_SANDBOX_STARTUP_HELPER=" + exe, "VSCODE_SANDBOX_STARTUP_SELECTION=" + path}, cleanup, nil
+	env := []string{"VSCODE_SANDBOX_STARTUP_HELPER=" + exe, "VSCODE_SANDBOX_STARTUP_SELECTION=" + path}
+	if old := ExistingProject(s.Project); old != nil && old.Ready {
+		env = append(env, "VSCODE_SANDBOX_RESUME=1")
+		if old.SandboxName != "" {
+			env = append(env, "VSCODE_SANDBOX_REUSE_NAME="+old.SandboxName)
+		}
+	}
+	return env, cleanup, nil
 }
 
 func command(log io.Writer, args ...string) error {
@@ -279,7 +391,7 @@ func EnsureHost(log io.Writer) error {
 // HandleHelper is used by generated shell launchers, with networking still
 // guarded by a per-sandbox deny-all rule while credentials are installed.
 func HandleHelper() bool {
-	if len(os.Args) != 4 || (os.Args[1] != "--startup-apply" && os.Args[1] != "--startup-guard") {
+	if len(os.Args) != 4 || (os.Args[1] != "--startup-apply" && os.Args[1] != "--startup-guard" && os.Args[1] != "--startup-ready") {
 		return false
 	}
 	var s Selection
@@ -288,7 +400,9 @@ func HandleHelper() bool {
 		os.Exit(1)
 	}
 	var err error
-	if os.Args[1] == "--startup-guard" {
+	if os.Args[1] == "--startup-ready" {
+		err = finalizeProject(s, os.Args[2], os.Stdout)
+	} else if os.Args[1] == "--startup-guard" {
 		err = guardNetwork(os.Args[2], os.Stdout)
 	} else {
 		err = applyStartup(os.Args[2], os.Args[3], s, os.Stdout)
@@ -300,11 +414,64 @@ func HandleHelper() bool {
 	return true
 }
 func applyStartup(name, agent string, s Selection, log io.Writer) error {
-	if agent == "codex" {
+	var networkErr error
+	var endpointHost string
+	s, endpointHost, networkErr = withPrivateEndpointAccess(s)
+	if networkErr != nil {
+		return networkErr
+	}
+	if endpointHost != "" {
+		fmt.Fprintln(log, privateEndpointNotice(endpointHost))
+	}
+	if s.Endpoint == "private" {
+		data, err := privateContinueConfig(context.Background(), s)
+		if err != nil {
+			return err
+		}
+		script := `set -eu
+umask 077
+mkdir -p "$HOME/.continue"
+cd "$HOME/.continue"
+if [ ! -e .sandbox-managed ]; then
+  if [ -e config.yaml ]; then cp -p config.yaml .sandbox-original-config.yaml; fi
+  touch .sandbox-managed
+fi
+cat > .sandbox-config.tmp
+mv .sandbox-config.tmp config.yaml`
+		cmd := exec.Command("sbx", "exec", "-i", name, "sh", "-c", script)
+		hideWindow(cmd)
+		cmd.Stdin = bytes.NewReader(data)
+		cmd.Stdout, cmd.Stderr = log, log
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("Install Continue connection settings: %w", err)
+		}
+		var configured struct {
+			Models []json.RawMessage `json:"models"`
+		}
+		_ = json.Unmarshal(data, &configured)
+		fmt.Fprintf(log, "Continue configured with %d private models inside this sandbox. Codex uses OpenAI.\n", len(configured.Models))
+	} else {
+		script := `set -eu
+if [ -e "$HOME/.continue/.sandbox-managed" ]; then
+  cd "$HOME/.continue"
+  if [ -e .sandbox-original-config.yaml ]; then mv .sandbox-original-config.yaml config.yaml; else rm -f config.yaml; fi
+  rm -f .sandbox-managed
+fi`
+		cmd := exec.Command("sbx", "exec", name, "sh", "-c", script)
+		hideWindow(cmd)
+		cmd.Stdout, cmd.Stderr = log, log
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("Restore Continue connection settings: %w", err)
+		}
+	}
+	if agent == "codex" || agent == "both" {
 		var data []byte
-		if s.Endpoint == "private" {
+		if s.ConfigFile != "" {
+			codexSelection := s
+			codexSelection.Endpoint = "default"
+			codexSelection.Token = ""
 			var err error
-			data, err = os.ReadFile(s.ConfigFile)
+			data, err = endpointConfig(codexSelection)
 			if err != nil {
 				return err
 			}
@@ -313,7 +480,8 @@ func applyStartup(name, agent string, s Selection, log io.Writer) error {
 		script := `set -eu
 +mkdir -p "$HOME/.codex"
 +cd "$HOME/.codex"
-+if [ "$1" = private ]; then
++rm -f .sandbox-models.json
++if [ "$1" = import ]; then
 +  if [ ! -e .sandbox-managed ]; then
 +    if [ -e config.toml ]; then cp -p config.toml .sandbox-original.toml; fi
 +    touch .sandbox-managed
@@ -328,7 +496,11 @@ func applyStartup(name, agent string, s Selection, log io.Writer) error {
 +  fi
 +fi`
 		script = strings.ReplaceAll(script, "\n+", "\n")
-		cmd := exec.Command("sbx", "exec", "-i", name, "sh", "-c", script, "startup", s.Endpoint)
+		mode := "default"
+		if s.ConfigFile != "" {
+			mode = "import"
+		}
+		cmd := exec.Command("sbx", "exec", "-i", name, "sh", "-c", script, "startup", mode, s.Endpoint)
 		hideWindow(cmd)
 		cmd.Stdin = bytes.NewReader(data)
 		cmd.Stdout = log
@@ -336,7 +508,19 @@ func applyStartup(name, agent string, s Selection, log io.Writer) error {
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("Install Codex connection settings: %w", err)
 		}
-		fmt.Fprintln(log, "Codex connection:", s.Endpoint)
+		fmt.Fprintln(log, "Codex connection: default OpenAI")
 	}
 	return applyNetwork(name, s, log)
+}
+
+var apiVersion = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}(-preview)?$`)
+
+func cleanConnectionURL(source *url.URL) string {
+	clean := *source
+	query := url.Values{}
+	if version := clean.Query().Get("api-version"); apiVersion.MatchString(version) {
+		query.Set("api-version", version)
+	}
+	clean.RawQuery, clean.Fragment, clean.RawFragment = query.Encode(), "", ""
+	return clean.String()
 }

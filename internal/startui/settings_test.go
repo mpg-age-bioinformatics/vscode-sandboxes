@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/pelletier/go-toml/v2"
@@ -22,7 +21,36 @@ func selection() Selection {
 	return Selection{Project: filepath.Join(os.TempDir(), "sandbox-project"), Version: "3.13", Agent: "codex", Network: "open", Endpoint: "default"}
 }
 
-func TestEndpointRoundTripAndCredentialMapping(t *testing.T) {
+func TestPrivateEndpointRequiresStartupKey(t *testing.T) {
+	s := selection()
+	s.Endpoint, s.BaseURL, s.Model = "private", "https://models.example/v1", "model"
+	for _, config := range []string{"", filepath.Join(t.TempDir(), "connection.toml")} {
+		s.ConfigFile = config
+		for _, key := range []string{"", " \t\n"} {
+			s.Token = key
+			if err := Validate(s); err == nil || err.Error() != "Enter an API key for the private endpoint." {
+				t.Fatalf("expected missing key rejection, got %v", err)
+			}
+			_, cleanup, err := PrepareEnvironment(s)
+			if cleanup != nil {
+				cleanup()
+			}
+			if err == nil || err.Error() != "Enter an API key for the private endpoint." {
+				t.Fatalf("expected startup rejection, got %v", err)
+			}
+		}
+		s.Token = "sandbox-key"
+		if err := Validate(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s = selection()
+	if err := Validate(s); err != nil {
+		t.Fatalf("default connection requires no key: %v", err)
+	}
+}
+
+func TestEndpointRoundTripWithoutSourceCredentials(t *testing.T) {
 	isolatedSettings(t)
 	t.Setenv("PRIVATE_TOKEN", "a-secret-key")
 	source := filepath.Join(t.TempDir(), "config.toml")
@@ -52,12 +80,13 @@ http_headers = { "x-project" = "biology" }
 		t.Fatal(err)
 	}
 	provider := parsed["model_providers"].(map[string]any)["company"].(map[string]any)
-	if provider["experimental_bearer_token"] != "a-secret-key" || provider["env_key"] != nil {
-		t.Fatal("credential was not mapped")
+	if provider["experimental_bearer_token"] != nil || provider["env_key"] != "PRIVATE_TOKEN" {
+		t.Fatal("source authentication was imported")
 	}
-	if parsed["notify"] != nil || provider["query_params"] == nil || provider["http_headers"] == nil {
+	if parsed["notify"] != nil || provider["query_params"] == nil || provider["http_headers"] != nil {
 		t.Fatal("connection import did not preserve the right settings")
 	}
+	s.Token = "separate-sandbox-key"
 	env, cleanup, err := PrepareEnvironment(s)
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +103,7 @@ http_headers = { "x-project" = "biology" }
 	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatalf("credentials mode: %o", info.Mode().Perm())
 	}
-	if defaultCodexConfig() != saved {
+	if automaticConfigFile(saved) != saved {
 		t.Fatal("saved endpoint was not discovered")
 	}
 	original, _ := os.ReadFile(source)
@@ -86,23 +115,32 @@ http_headers = { "x-project" = "biology" }
 		t.Fatal("saved config cannot be reused:", err)
 	}
 }
-func TestEndpointMissingCredentialsFailsWithoutWriting(t *testing.T) {
+func TestHostEnvironmentCredentialsAreNeverRead(t *testing.T) {
 	isolatedSettings(t)
-	t.Setenv("MISSING_TEST_KEY", "")
+	t.Setenv("MISSING_TEST_KEY", "host-secret-never-copy")
 	source := filepath.Join(t.TempDir(), "config.toml")
-	os.WriteFile(source, []byte("model='internal'\nmodel_provider='private'\n[model_providers.private]\nbase_url='https://private.example/v1'\nenv_key='MISSING_TEST_KEY'\n"), 0600)
+	os.WriteFile(source, []byte("model='internal'\nmodel_provider='private'\n[model_providers.private]\nbase_url='https://private.example/v1?api_key=url-secret'\nenv_key='MISSING_TEST_KEY'\nexperimental_bearer_token='file-secret'\nhttp_headers={Authorization='header-secret'}\nenv_http_headers={Authorization='MISSING_TEST_KEY'}\n"), 0600)
 	s := selection()
 	s.Endpoint = "private"
 	s.ConfigFile = source
-	if _, _, err := PrepareEnvironment(s); err == nil || !strings.Contains(err.Error(), "MISSING_TEST_KEY") {
+	s.Token = "explicit-sandbox-key"
+	_, cleanup, err := PrepareEnvironment(s)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(settingsDir(), "endpoints", "private.toml")); !os.IsNotExist(err) {
-		t.Fatal("wrote invalid endpoint")
+	defer cleanup()
+	saved, _ := os.ReadFile(filepath.Join(settingsDir(), "endpoints", "private.toml"))
+	for _, secret := range []string{"host-secret-never-copy", "file-secret", "header-secret", "url-secret", "explicit-sandbox-key"} {
+		if bytes.Contains(saved, []byte(secret)) {
+			t.Fatal("persisted authentication", secret)
+		}
 	}
-	s.Token = "key-from-form"
-	if _, err := endpointConfig(s); err != nil {
+	runtimeConfig, err := endpointConfig(s)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !bytes.Contains(runtimeConfig, []byte("explicit-sandbox-key")) {
+		t.Fatal("explicit sandbox key was not supplied at runtime")
 	}
 }
 func TestNewEndpointUsesIndependentProvider(t *testing.T) {

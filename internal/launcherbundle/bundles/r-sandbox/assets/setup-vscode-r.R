@@ -1,6 +1,6 @@
-# Run inside the sandbox with Rscript --vanilla code/setup-vscode-r.R.
+# Run inside the sandbox with Rscript --vanilla code/.sandbox/setup-vscode-r.R.
 # sess itself belongs in vscode-R's private library; its dependencies use renv.
-source("code/activate-project.R")
+source("code/.sandbox/activate-project.R")
 local({
   roots <- unique(c(Sys.getenv("VSCODE_AGENT_FOLDER", unset = ""),
                     path.expand("~/.vscode-server"),

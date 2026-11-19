@@ -39,6 +39,7 @@ for language in python r bioinformatics; do
   cp "$repository_root/$language-sandbox/assets/$name Sandbox.app/Contents/Resources/${name}Sandbox.icns" "$worker/"
   rm -rf -- "$worker/Setup"
   cp -R "$repository_root/internal/launcherbundle/bundles/$language-sandbox" "$worker/Setup"
+  cp "$repository_root/internal/launcherbundle/bundles/common/assets/"* "$worker/Setup/assets/"
   cp "$repository_root/LICENSE" "$repository_root/THIRD-PARTY-NOTICES.txt" "$worker/Setup/"
   ln -sf '../../Sandbox Desktop' "$worker/Sandbox Desktop"
   ln -sf '../../Sandbox Window' "$worker/Sandbox Window"

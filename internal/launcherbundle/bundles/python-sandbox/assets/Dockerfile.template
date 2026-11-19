@@ -1,26 +1,3 @@
-ARG PYTHON_IMAGE=docker.io/library/python:__PYTHON_VERSION__-bookworm
-ARG AGENT_TEMPLATE=__AGENT_TEMPLATE__
-FROM ${PYTHON_IMAGE} AS python_runtime
-
-# Preserve notices from the runtime stage as well as the copied runtime itself.
-# Keep these separate from the final base image's notices to avoid overwrites.
-USER root
-RUN mkdir -p /opt/runtime-licenses/packages && \
-    cp -a /usr/share/doc/. /opt/runtime-licenses/packages/ && \
-    dpkg-query -W -f='${binary:Package}\t${Version}\t${source:Package}\t${source:Version}\n' > /opt/runtime-licenses/packages.tsv && \
-    for directory in /usr/local/share/doc /usr/local/share/licenses; do \
-      if [ ! -d "$directory" ]; then continue; fi; \
-      cp -a "$directory" "/opt/runtime-licenses/$(basename "$directory")"; \
-    done
-
-FROM docker.io/docker/sandbox-templates:${AGENT_TEMPLATE}
-USER root
-COPY --from=python_runtime /usr/local/ /opt/python/
-ENV PATH="/opt/python/bin:${PATH}"
-# A copied venv interpreter retains Python's shared-library dependency but no
-# longer resides beside /opt/python/lib. Keep that runtime directory visible so
-# Windows-hosted workspaces can use venv --copies instead of Linux symlinks.
-ENV LD_LIBRARY_PATH="/opt/python/lib"
-COPY --from=python_runtime /opt/runtime-licenses/ /usr/local/share/licenses/vscode-sandboxes/python-runtime/
-USER agent
-RUN python --version && python -m venv --help >/dev/null
+# Development container base; startup pins BASE_IMAGE to its resolved digest.
+ARG BASE_IMAGE=mcr.microsoft.com/devcontainers/python:__PYTHON_VERSION__-bookworm
+FROM ${BASE_IMAGE}

@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-//go:embed window.html
+//go:embed window.html site-presets.js
 var content embed.FS
 
 type Config struct {
@@ -37,17 +37,22 @@ type Config struct {
 }
 
 type Selection struct {
-	Sandbox    string `json:"sandbox"`
-	Project    string `json:"project"`
-	Version    string `json:"version"`
-	Agent      string `json:"agent"`
-	Network    string `json:"network"`
-	Sites      string `json:"sites"`
-	Endpoint   string `json:"endpoint"`
-	ConfigFile string `json:"configFile"`
-	BaseURL    string `json:"baseURL"`
-	Model      string `json:"model"`
-	Token      string `json:"token"`
+	FreshRepository bool              `json:"freshRepository,omitempty"`
+	PreservePaths   []string          `json:"preservePaths,omitempty"`
+	Sandbox         string            `json:"sandbox"`
+	Project         string            `json:"project"`
+	Version         string            `json:"version"`
+	Agent           string            `json:"agent"`
+	Network         string            `json:"network"`
+	Sites           string            `json:"sites"`
+	SiteLists       map[string]string `json:"siteLists,omitempty"`
+	EndpointSites   map[string]string `json:"endpointSites,omitempty"`
+	Endpoint        string            `json:"endpoint"`
+	ConfigFile      string            `json:"configFile"`
+	ConfigOverrides bool              `json:"configOverrides,omitempty"`
+	BaseURL         string            `json:"baseURL"`
+	Model           string            `json:"model"`
+	Token           string            `json:"token"`
 }
 
 type logState struct {
@@ -89,6 +94,21 @@ func (s *logState) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func (s *logState) activityText() string {
+	s.Lock()
+	defer s.Unlock()
+	text := s.Text
+	if s.Error != "" {
+		text += "\nError: " + s.Error + "\n"
+	}
+	for _, secret := range s.secrets {
+		if secret != "" {
+			text = strings.ReplaceAll(text, secret, "[redacted]")
+		}
+	}
+	return text
+}
+
 // Run keeps the window and its live log open until the user closes it.
 func Run(config Config, execute func(Selection, io.Writer) error) error {
 	ln, err := net.Listen("tcp4", "127.0.0.1:0")
@@ -102,6 +122,7 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 	}
 	path := "/" + hex.EncodeToString(key) + "/"
 	state := &logState{answer: make(chan bool, 1)}
+	var folderPicker sync.Mutex
 	closed := make(chan struct{}, 1)
 	mux := http.NewServeMux()
 	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
@@ -121,19 +142,84 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			data, _ := content.ReadFile("window.html")
 			_, _ = w.Write(data)
+		case "site-presets.js":
+			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+			data, _ := content.ReadFile("site-presets.js")
+			_, _ = w.Write(data)
 		case "defaults":
 			c := struct {
 				Config
-				Saved  Selection `json:"saved"`
-				Import string    `json:"import"`
-			}{Config: config}
+				Saved       Selection           `json:"saved"`
+				SitePresets map[string][]string `json:"sitePresets"`
+				ProjectRoot string              `json:"projectRoot"`
+				Platform    string              `json:"platform"`
+			}{Config: config, SitePresets: sitePresets(), ProjectRoot: RecommendedProjectRoot(), Platform: runtime.GOOS}
 			_ = readJSON(filepath.Join(settingsDir(), config.Slug+".json"), &c.Saved)
-			c.Import = defaultCodexConfig()
+			c.Saved.ConfigFile, c.Saved.Model, c.Saved.Token = "", "", ""
+			c.Saved.ConfigOverrides = false
 			_ = json.NewEncoder(w).Encode(c)
+		case "project-location":
+			if r.Method != "POST" {
+				http.Error(w, "POST required", 405)
+				return
+			}
+			var request struct {
+				Path    string `json:"path"`
+				Sandbox string `json:"sandbox"`
+			}
+			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&request); err != nil {
+				http.Error(w, err.Error(), 400)
+				return
+			}
+			location, err := describeProjectLocation(RecommendedProjectRoot(), request.Path, request.Sandbox)
+			if err != nil {
+				http.Error(w, err.Error(), 400)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(location)
 		case "status":
 			state.Lock()
 			defer state.Unlock()
 			_ = json.NewEncoder(w).Encode(state)
+		case "activity":
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			if r.URL.Query().Has("download") {
+				w.Header().Set("Content-Disposition", `attachment; filename="startup-activity.txt"`)
+			}
+			_, _ = io.WriteString(w, state.activityText())
+		case "pick-folder":
+			if r.Method != "POST" {
+				http.Error(w, "POST required", 405)
+				return
+			}
+			state.Lock()
+			running := state.Running
+			state.Unlock()
+			if config.ProjectMode || running {
+				http.Error(w, "This selection cannot be changed now.", 409)
+				return
+			}
+			if !folderPicker.TryLock() {
+				http.Error(w, "A folder picker is already open.", 409)
+				return
+			}
+			defer folderPicker.Unlock()
+			var request struct {
+				Path string `json:"path"`
+			}
+			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384)).Decode(&request); err != nil {
+				http.Error(w, "Invalid picker request", 400)
+				return
+			}
+			selected, err := pickFolder(r.Context(), request.Path)
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(struct {
+				Path string `json:"path"`
+			}{selected})
 		case "start":
 			if r.Method != "POST" {
 				http.Error(w, "POST required", 405)
@@ -144,8 +230,15 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 				http.Error(w, err.Error(), 400)
 				return
 			}
+			selection = directConnection(selection)
 			var resolveErr error
 			selection, resolveErr = resolveSelection(config, selection)
+			if resolveErr != nil {
+				http.Error(w, resolveErr.Error(), 400)
+				return
+			}
+			var endpointHost string
+			selection, endpointHost, resolveErr = withPrivateEndpointAccess(selection)
 			if resolveErr != nil {
 				http.Error(w, resolveErr.Error(), 400)
 				return
@@ -154,11 +247,11 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 				http.Error(w, err.Error(), 400)
 				return
 			}
-			if config.ProjectMode && (selection.Project != config.Project || selection.Agent != config.Agent) {
-				http.Error(w, "The project launcher must use its configured workspace and agent.", 400)
+			if config.ProjectMode && selection.Project != config.Project {
+				http.Error(w, "The project launcher must use its configured workspace.", 400)
 				return
 			}
-			if selection.Endpoint == "private" {
+			if selection.Endpoint == "private" || selection.ConfigFile != "" {
 				if _, err := endpointConfig(selection); err != nil {
 					http.Error(w, err.Error(), 400)
 					return
@@ -174,7 +267,13 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 			state.secrets = []string{selection.Token}
 			state.Unlock()
 			go func() {
-				err := EnsureHost(state)
+				if endpointHost != "" {
+					fmt.Fprintln(state, privateEndpointNotice(endpointHost))
+				}
+				err := CheckProjectAccess(selection.Project)
+				if err == nil {
+					err = EnsureHost(state)
+				}
 				if err == nil {
 					err = prepareGlobalPolicy(selection, state, func(message string) bool {
 						state.Lock()
@@ -189,6 +288,11 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 				}
 				if err == nil {
 					err = execute(selection, state)
+					if err == nil {
+						if old := ExistingProject(selection.Project); old != nil && !old.Ready {
+							err = rememberProject(selection, "")
+						}
+					}
 				}
 				state.Lock()
 				defer state.Unlock()
@@ -199,7 +303,7 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 					saved := selection
 					saved.Token = ""
 					if saved.Endpoint == "private" {
-						saved.ConfigFile = filepath.Join(settingsDir(), "endpoints", "private.toml")
+						// Keep private connection details out of persistent preferences.
 						saved.BaseURL = ""
 						saved.Model = ""
 					}

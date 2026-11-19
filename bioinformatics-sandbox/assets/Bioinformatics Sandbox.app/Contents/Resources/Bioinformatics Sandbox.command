@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-agent="${1:-}"
+agent="${1:-both}"
 project_dir="${2:-}"
 
 finish() {
@@ -100,10 +100,10 @@ export VSCODE_SANDBOX_PROJECT_APP_TEMPLATE="$setup_dir/assets/Run Bioinformatics
 export VSCODE_SANDBOX_PROJECT_APP_ICON="$asset_dir/BioinformaticsSandbox.icns"
 
 if [[ -z "$agent" ]]; then
-  read -r -p "Agent (codex or claude): " agent
+  agent=both
 fi
 if [[ -z "$project_dir" ]]; then
-  default_project="$HOME/Desktop/bioinformatics-sandbox-project"
+  default_project="$HOME/sandboxes/bioinformatics-sandbox-project"
   read -r -p "Project directory [$default_project]: " project_dir
   project_dir="${project_dir:-$default_project}"
 fi
@@ -127,4 +127,4 @@ fi
 }
 
 "$setup_script" "$project_dir" "$agent" || exit 1
-"$project_dir/code/run-bioinformatics-sandbox.sh" "$agent"
+"$project_dir/code/.sandbox/run-bioinformatics-sandbox.sh" "$agent"

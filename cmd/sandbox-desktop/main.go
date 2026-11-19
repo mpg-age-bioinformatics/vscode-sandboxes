@@ -22,7 +22,7 @@ func main() {
 			os.Exit(1)
 		}
 		home, _ := os.UserHomeDir()
-		c := startui.Config{Name: "VS Code Sandboxes", Slug: "sandboxes", Version: "3.13", VersionLabel: "Python version", Agent: "codex", Project: filepath.Join(home, "Desktop", "python-sandbox-project"), Sandboxes: startui.Catalog()}
+		c := startui.Config{Name: "VS Code - Docker Sandboxes", Slug: "sandboxes", Version: "3.13", VersionLabel: "Python version", Agent: "both", Project: filepath.Join(home, "sandboxes", "python-sandbox-project"), Sandboxes: startui.Catalog()}
 		err = startui.Run(c, func(s startui.Selection, log io.Writer) error {
 			item, err := startui.FindSandbox(s.Sandbox)
 			if err != nil {
@@ -46,10 +46,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Missing desktop launcher configuration")
 		os.Exit(2)
 	}
-	c := startui.Config{Name: os.Args[1], Slug: os.Args[2], Version: os.Args[3], VersionLabel: os.Args[4], Agent: "codex"}
+	c := startui.Config{Name: os.Args[1], Slug: os.Args[2], Version: os.Args[3], VersionLabel: os.Args[4], Agent: "both"}
 	commandPath := os.Args[5]
 	home, _ := os.UserHomeDir()
-	c.Project = filepath.Join(home, "Desktop", c.Slug+"-project")
+	c.Project = filepath.Join(home, "sandboxes", c.Slug+"-project")
 	if len(os.Args) == 8 {
 		c.ProjectMode = true
 		c.Project = os.Args[6]
@@ -71,6 +71,11 @@ func runWorker(path string, s startui.Selection, needsVersion, projectMode bool,
 		return err
 	}
 	defer cleanup()
+	if existing := startui.ExistingProject(s.Project); existing != nil {
+		fmt.Fprintln(log, "Reopening the existing sandbox project; skipping project scaffolding.")
+		path = startui.ProjectScript(s.Project, existing.Sandbox)
+		projectMode = true
+	}
 	args := []string{path}
 	if projectMode {
 		args = append(args, s.Agent)
@@ -81,6 +86,8 @@ func runWorker(path string, s startui.Selection, needsVersion, projectMode bool,
 		args = append(args, s.Agent, s.Project)
 	}
 	cmd := exec.Command("/bin/bash", args...)
+	// Avoid inheriting a deleted or privacy-protected working directory.
+	cmd.Dir = filepath.Dir(path)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdout = log
 	cmd.Stderr = log

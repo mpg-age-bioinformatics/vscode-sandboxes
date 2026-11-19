@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-if [[ -x /opt/podman/bin/podman ]]; then export PATH="${PATH}:/opt/podman/bin"; fi
 
 python_version="${1:-}"
-agent="${2:-}"
+agent="${2:-both}"
 project_dir="${3:-}"
 
 finish() {
@@ -45,7 +44,6 @@ require_command git "Install Git from https://git-scm.com/download/mac and reope
 require_command ssh "Install or restore the macOS OpenSSH client and reopen the app."
 require_command code "Install Visual Studio Code from https://code.visualstudio.com/docs/setup/mac and enable its shell command."
 require_command sbx "Install Docker Sandboxes from https://docs.docker.com/ai/sandboxes/install/."
-require_command podman "Install Podman, then run podman machine init (once) and podman machine start."
 
 asset_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 setup_dir="$asset_dir/Setup"
@@ -97,10 +95,7 @@ if ! sbx diagnose; then
   echo "Error: Docker Sandboxes diagnostics failed. Confirm virtualization is available and run 'sbx login'." >&2
   exit 1
 fi
-if ! podman info >/dev/null 2>&1; then
-  echo "Error: Podman is not available. Run podman machine init (once) and podman machine start, then retry." >&2
-  exit 1
-fi
+
 
 if [[ -n "$project_dir" ]]; then
   case "$project_dir" in
@@ -128,4 +123,4 @@ export VSCODE_SANDBOX_DESKTOP_RESOURCES="$asset_dir"
 export VSCODE_SANDBOX_PROJECT_APP_TEMPLATE="$setup_dir/assets/Run Python Sandbox.app.template"
 export VSCODE_SANDBOX_PROJECT_APP_ICON="$asset_dir/PythonSandbox.icns"
 "$setup_script" "$project_dir" "$python_version" "$agent" || exit 1
-"$project_dir/code/run-python-sandbox.sh" "$agent"
+"$project_dir/code/.sandbox/run-python-sandbox.sh" "$agent"

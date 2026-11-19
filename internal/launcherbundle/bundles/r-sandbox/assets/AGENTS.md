@@ -2,8 +2,8 @@
 
 - Put implementation files in `code/` and data or generated artifacts in `data/`.
 - Use R as the default analysis language unless the task requires another tool.
-- Treat Docker Sandbox setup as completed scaffolding. Do not create a Dev Container, rerun setup after ordinary changes, or use the host Docker socket.
-- Run R inside Docker Sandbox. Use the project `.r-library/` through `R_LIBS_USER`; never install project packages on the host or globally in the sandbox.
+- Treat Docker Sandbox setup as completed scaffolding. Use the existing development container inside the general Docker Sandbox. Do not rerun scaffolding after ordinary changes or mount a host Docker socket.
+- Run R inside the R development container, which is managed by Docker inside the general sandbox. Use the project `.r-library/` through `R_LIBS_USER`; it is backed by a sandbox-local Docker volume. Never install project packages on the host or into the outer sandbox.
 - Record every package installation instruction in tracked code or a dependency manifest. Pin every package exactly; do not use ranges, unversioned packages, or `latest`.
 - Use `renv`. Record exact installs such as `renv::install("dplyr@1.1.4")`, run `renv::snapshot(type = "all")`, and track `renv.lock`. Update installation code and the lockfile together.
 - Before `library()` or `requireNamespace()`, affected scripts must activate the project-relative `renv/activate.R` or equivalently load the intended project library. Never hard-code an internal renv cache path.
@@ -21,27 +21,27 @@
 - Write analysis scripts as sectioned workflows that can be run incrementally, with user-editable configuration near the top and RStudio headers such as `# ---- Load data ----`.
 - Keep intermediate objects inspectable, validate inputs after loading, and save outputs under `data/`.
 - Do not use prompts, menus, `readline()`, or command-line arguments unless requested. “Interactive” means editable analysis code, not a prompt-driven program.
-- Keep scripts reproducible from top to bottom from the project root. Use `View(object)` for tables. Follow the Remote-SSH graphics workflow below for interactive plots.
+- Keep scripts reproducible from top to bottom from the project root. Use `View(object)` for tables. Follow the Dev Containers graphics workflow below for interactive plots.
 
-- Use Podman for all workload container builds, runs, and reproduction inside the sandbox; do not use Docker CLI or a host container socket. Use `sudo env XDG_RUNTIME_DIR=/run/user/0 podman --storage-driver=vfs --events-backend=file` consistently so builds, runs, and exec share the same root-owned image/container store. For builds, add `build --isolation=chroot --network=host`. For runs, add `run --cgroups=disabled --network=host` (or `--network=none` when networking is unnecessary): the sandbox has a read-only cgroup filesystem and no delegated cgroups. Host networking here shares only the sandbox network, not the physical host network. Keep recipes and pinned dependency manifests under `code/`, use fully qualified registry image names, mount only required project paths, and record actual Podman build/run/exec commands for reproducibility. Dockerfiles remain valid Podman build recipes.
+- The outer general sandbox owns the Docker Engine. Build, pull, and run workload containers only through that sandbox-local engine, never a host engine or socket. VS Code opens the inner development container by default; its terminals and agent tools execute there. Keep configuration in `code/.sandbox/devcontainer.json`, record the resolved image in `code/.sandbox/container-image.lock.json`, and retain the generated Dev Containers feature lockfile under `code/.sandbox/`. Keep the Dockerfile actually used to build the development container at `code/Dockerfile`. The inner container has no Docker socket mounted. To manage additional sibling containers, use `sbx exec <sandbox-name> docker ...` from the host launcher/terminal; do not install host Docker or expose a daemon over TCP.
 
-## Project dependencies and Remote-SSH plots
+## Project dependencies and Dev Containers plots
 
-- Run `Rscript code/setup-renv.R` inside the sandbox to install initial editor tooling or restore `renv.lock`; no sandbox rebuild is needed. Startup and scripts must use `source("code/activate-project.R")` before loading packages, from the project root. This activates `renv/activate.R` when initialized and uses `.r-library/` through both `R_LIBS_USER` and `RENV_PATHS_LIBRARY`.
+- Run `Rscript code/.sandbox/setup-renv.R` inside the sandbox to install initial editor tooling or restore `renv.lock`; no sandbox rebuild is needed. Startup and scripts must use `source("code/.sandbox/activate-project.R")` before loading packages, from the project root. This activates `renv/activate.R` when initialized and uses `.r-library/` through both `R_LIBS_USER` and `RENV_PATHS_LIBRARY`.
 - Keep the environment-specific working settings `RENV_CONFIG_INSTALL_TRANSACTIONAL=FALSE` and `RENV_CONFIG_CACHE_ENABLED=FALSE`. Do not generalize them to every R environment. Never hard-code renv cache paths.
-- Install pinned BiocManager separately before resolving Bioconductor packages. Add exact scientific package versions appropriate to the selected R/Bioconductor release in `code/setup-renv.R` before snapshotting. Update that code and `renv.lock` together; include transitive dependencies and project-local `languageserver@0.3.18`, `httpgd@2.1.4`, and `jsonlite@2.0.0`, `later@1.4.4`, `rstudioapi@0.17.1`, and `processx@3.9.0`. Keep the scoped later compiler flags during both installation and restore; verify bundled `sess` loads under the activated project library before opening VS Code. Use snapshot type `"all"` consistently, including `renv::settings$snapshot.type("all")` for status checks. Run `Rscript code/verify-renv.R` and affected analyses in fresh processes after changes.
-- Support Command+Enter in an attached R terminal in VS Code Remote-SSH, both from the top and section by section. Keep an editable `display_plot <- interactive()` flag near the top. Draw and save independently: batch Rscript saves PNG/PDF without opening a viewer; interactive runs explicitly draw and leave the device open.
+- Install pinned BiocManager separately before resolving Bioconductor packages. Add exact scientific package versions appropriate to the selected R/Bioconductor release in `code/.sandbox/setup-renv.R` before snapshotting. Update that code and `renv.lock` together; include transitive dependencies and project-local `languageserver@0.3.18`, `httpgd@2.1.4`, and `jsonlite@2.0.0`, `later@1.4.4`, `rstudioapi@0.17.1`, and `processx@3.9.0`. Keep the scoped later compiler flags during both installation and restore; verify bundled `sess` loads under the activated project library before opening VS Code. Use snapshot type `"all"` consistently, including `renv::settings$snapshot.type("all")` for status checks. Run `Rscript code/.sandbox/verify-renv.R` and affected analyses in fresh processes after changes.
+- Support Command+Enter in an attached R terminal in VS Code Dev Containers, both from the top and section by section. Keep an editable `display_plot <- interactive()` flag near the top. Draw and save independently: batch Rscript saves PNG/PDF without opening a viewer; interactive runs explicitly draw and leave the device open.
 - With `r.plot.useHttpgd`, open the configured VS Code device as below. Do not call `httpgd::hgd()` directly for user-facing plots: it bypasses VS Code's viewer callback. Do not assume a remote localhost URL opens locally. Do not assert that the device name is `"httpgd"`; this version can report `"unigd"`.
 
 ```r
 # ---- Configuration ----
 display_plot <- interactive()
 # ---- Activate packages ----
-source("code/activate-project.R")
+source("code/.sandbox/activate-project.R")
 # ---- Display heatmap (after constructing heatmap) ----
 if (display_plot) {
   if (!is.function(getOption("device"))) {
-    stop("In VS Code Remote-SSH run R: Create R terminal, attach it, then rerun this section.")
+    stop("In VS Code Dev Containers run R: Create R terminal, attach it, then rerun this section.")
   }
   grDevices::dev.new(width = 10, height = 8.2, noRStudioGD = TRUE)
   ComplexHeatmap::draw(heatmap, merge_legends = TRUE,

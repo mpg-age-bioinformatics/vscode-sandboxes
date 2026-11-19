@@ -42,3 +42,19 @@ func TestProjectTypeCannotBeChanged(t *testing.T) {
 		t.Fatal(got, err)
 	}
 }
+
+func TestBothAgentsReplaceSavedChoiceAndAllowPrivateCodex(t *testing.T) {
+	for _, previous := range []string{"", "codex", "claude", "both"} {
+		s := selection()
+		s.Sandbox, s.Agent = "python-sandbox", previous
+		s.Endpoint, s.BaseURL, s.Model = "private", "https://models.example.org/v1", "private-model"
+		s.Token = "sandbox-key"
+		got, err := resolveSelection(Config{Sandboxes: Catalog()}, s)
+		if err != nil || got.Agent != "both" {
+			t.Fatalf("saved choice %q: %v %v", previous, got, err)
+		}
+		if err := Validate(got); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

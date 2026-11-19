@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-if [[ -x /opt/podman/bin/podman ]]; then export PATH="${PATH}:/opt/podman/bin"; fi
 
 r_version="${1:-}"
-agent="${2:-}"
+agent="${2:-both}"
 project_dir="${3:-}"
 
 finish() {
@@ -45,7 +44,6 @@ require_command git "Install Git from https://git-scm.com/download/mac and reope
 require_command ssh "Install or restore the macOS OpenSSH client and reopen the app."
 require_command code "Install Visual Studio Code from https://code.visualstudio.com/docs/setup/mac and enable its shell command."
 require_command sbx "Install Docker Sandboxes from https://docs.docker.com/ai/sandboxes/install/."
-require_command podman "Install Podman, then run podman machine init (once) and podman machine start."
 
 asset_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 setup_dir="$asset_dir/Setup"
@@ -97,10 +95,7 @@ if ! sbx diagnose; then
   echo "Error: Docker Sandboxes diagnostics failed. Confirm virtualization is available and run 'sbx login'." >&2
   exit 1
 fi
-if ! podman info >/dev/null 2>&1; then
-  echo "Error: Podman is not available. Run podman machine init (once) and podman machine start, then retry." >&2
-  exit 1
-fi
+
 
 setup_script="$setup_dir/scripts/setup-project.sh"
 export VSCODE_SANDBOX_DESKTOP_RESOURCES="$asset_dir"
@@ -111,10 +106,10 @@ if [[ -z "$r_version" ]]; then
   read -r -p "R version (major.minor or major.minor.patch): " r_version
 fi
 if [[ -z "$agent" ]]; then
-  read -r -p "Agent (codex or claude): " agent
+  agent=both
 fi
 if [[ -z "$project_dir" ]]; then
-  default_project="$HOME/Desktop/r-sandbox-project"
+  default_project="$HOME/sandboxes/r-sandbox-project"
   read -r -p "Project directory [$default_project]: " project_dir
   project_dir="${project_dir:-$default_project}"
 fi
@@ -138,4 +133,4 @@ fi
 }
 
 "$setup_script" "$project_dir" "$r_version" "$agent" || exit 1
-"$project_dir/code/run-r-sandbox.sh" "$agent"
+"$project_dir/code/.sandbox/run-r-sandbox.sh" "$agent"

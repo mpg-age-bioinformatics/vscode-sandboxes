@@ -18,7 +18,7 @@ for argument in "$@"; do
     exit 0
   fi
 done
-if [[ " $* " == *" remote get-url origin "* ]]; then
+if [[ " $* " == *" config --local --get remote.origin.url "* ]]; then
   printf 'https://github.com/mpg-age-bioinformatics/skills.git\n'
   exit 0
 fi
@@ -37,8 +37,11 @@ runner_source="$test_root/installer.exe"
 printf 'self-contained runner\n' > "$runner_source"
 
 run_case() {
-  local slug="$1" version="$2" agent="codex"
+  local slug="$1" version="$2" agent="both"
   local bundle="$repository_root/internal/launcherbundle/bundles/$slug"
+  if [[ -n "${SANDBOX_TEST_PACKAGED_LAUNCHERS:-}" ]]; then
+    bundle="$SANDBOX_TEST_PACKAGED_LAUNCHERS/$slug/Setup"
+  fi
   local project="$test_root/$slug-project"
   mkdir -p "$project"
 
@@ -53,26 +56,26 @@ run_case() {
     "$bundle/scripts/setup-project.sh" "${args[@]}" >/dev/null
 
   [[ -f "$project/skills/EMPTY_SKILLS_CLONE" ]]
-  cmp "$repository_root/LICENSE" "$project/code/VS-Code-Sandboxes-LICENSE.txt"
-  cmp "$repository_root/THIRD-PARTY-NOTICES.txt" "$project/code/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt"
+  cmp "$repository_root/LICENSE" "$project/code/.sandbox/VS-Code-Sandboxes-LICENSE.txt"
+  cmp "$repository_root/THIRD-PARTY-NOTICES.txt" "$project/code/.sandbox/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt"
   case "$slug" in
     python-sandbox)
       runner_name="Run Python Sandbox.exe"
-      cmp "$bundle/assets/run-python-sandbox.sh" "$project/code/run-python-sandbox.sh"
-      [[ "$(< "$project/code/.python-sandbox-agent")" == "$agent" ]]
+      cmp "$bundle/assets/run-python-sandbox.sh" "$project/code/.sandbox/run-python-sandbox.sh"
+      [[ "$(< "$project/code/.sandbox/.python-sandbox-agent")" == "$agent" ]]
       ;;
     r-sandbox)
       runner_name="Run R Sandbox.exe"
-      cmp "$bundle/assets/run-r-sandbox.sh" "$project/code/run-r-sandbox.sh"
-      [[ "$(< "$project/code/.r-sandbox-agent")" == "$agent" ]]
+      cmp "$bundle/assets/run-r-sandbox.sh" "$project/code/.sandbox/run-r-sandbox.sh"
+      [[ "$(< "$project/code/.sandbox/.r-sandbox-agent")" == "$agent" ]]
       for script in activate-project.R setup-renv.R verify-renv.R setup-vscode-r.R; do
-        cmp "$bundle/assets/$script" "$project/code/$script"
+        cmp "$bundle/assets/$script" "$project/code/.sandbox/$script"
       done
       cmp "$bundle/assets/Rprofile" "$project/.Rprofile"
       # Use real Git here: ensure reproduction files survive the root allowlist.
       git -C "$project" init -q
       mkdir -p "$project/renv/cache" "$project/renv/library" "$project/.r-library/pkg"
-      for tracked in .Rprofile .Renviron renv.lock renv/activate.R renv/settings.json code/setup-renv.R; do
+      for tracked in .Rprofile .Renviron renv.lock renv/activate.R renv/settings.json code/.sandbox/setup-renv.R; do
         touch "$project/$tracked"
         if git -C "$project" check-ignore -q "$tracked"; then
           echo "Reproduction file ignored: $tracked" >&2
@@ -85,10 +88,22 @@ run_case() {
       ;;
     bioinformatics-sandbox)
       runner_name="Run Bioinformatics Sandbox.exe"
-      cmp "$bundle/assets/run-bioinformatics-sandbox.sh" "$project/code/run-bioinformatics-sandbox.sh"
-      [[ "$(< "$project/code/.bioinformatics-sandbox-agent")" == "$agent" ]]
+      cmp "$bundle/assets/run-bioinformatics-sandbox.sh" "$project/code/.sandbox/run-bioinformatics-sandbox.sh"
+      [[ "$(< "$project/code/.sandbox/.bioinformatics-sandbox-agent")" == "$agent" ]]
       ;;
   esac
+  if [[ "$slug" != bioinformatics-sandbox ]]; then
+    [[ -f "$project/code/.sandbox/devcontainer.json" && -f "$project/code/.sandbox/sandbox-runtime.json" ]]
+    [[ -f "$project/code/Dockerfile" ]]
+    [[ "$(find "$project/code" -mindepth 1 -maxdepth 1 ! -name .sandbox ! -name Dockerfile | wc -l | tr -d ' ')" == 0 ]]
+    for shared in run-language-sandbox.sh start-development-container.sh development-container.js initialize-development-container.sh verify-development-container.sh; do
+      cmp "$repository_root/internal/launcherbundle/bundles/common/assets/$shared" "$project/code/.sandbox/$shared"
+    done
+  fi
+  for helper in prepare-continue.py install-continue.js setup-continue.sh; do
+    cmp "$repository_root/internal/launcherbundle/bundles/common/assets/$helper" "$project/code/.sandbox/$helper"
+  done
+  cmp "$repository_root/internal/launcherbundle/bundles/common/assets/install-coding-agents.sh" "$project/code/.sandbox/install-coding-agents.sh"
   # Exercise real Git ignore and commit protection for all sandbox variants.
   git -C "$project" init -q
   mkdir -p "$project/code/data_nested" "$project/code/analysis/data_archive" "$project/data_12345678"
@@ -105,7 +120,7 @@ run_case() {
   git -C "$project" rm --cached -q -r -- data data_12345678 code/data_nested code/analysis/data_archive
   (cd "$project" && .git/hooks/pre-commit)
   [[ -f "$project/data/demo.csv" ]]
-  cmp "$runner_source" "$project/code/$runner_name"
+  cmp "$runner_source" "$project/code/.sandbox/$runner_name"
   # All flavors must also install a self-contained macOS project window.
   local app_name icon_name
   case "$slug" in
@@ -122,11 +137,11 @@ run_case() {
     VSCODE_SANDBOX_PROJECT_APP_ICON="$repository_root/$slug/assets/$app_name.app/Contents/Resources/$icon_name.icns" \
     VSCODE_SANDBOX_DESKTOP_RESOURCES="$desktop_resources" \
     "$bundle/scripts/setup-project.sh" "${args[@]}" >/dev/null
-  local installed_app="$project/code/Run $app_name.app"
+  local installed_app="$project/code/.sandbox/Run $app_name.app"
   cmp "$desktop_resources/Sandbox Desktop" "$installed_app/Contents/Resources/Sandbox Desktop"
   cmp "$desktop_resources/Sandbox Window" "$installed_app/Contents/Resources/Sandbox Window"
   [[ -x "$installed_app/Contents/MacOS/run-$slug" ]]
-  [[ "$(< "$project/code/.$slug-agent")" == "$agent" ]]
+  [[ "$(< "$project/code/.sandbox/.$slug-agent")" == "$agent" ]]
   ! grep -F 'open -a Terminal' "$installed_app/Contents/MacOS/run-$slug"
   [[ -z "$(find "$project" -path "$project/skills" -prune -o -name EMPTY_SKILLS_CLONE -print)" ]]
 }

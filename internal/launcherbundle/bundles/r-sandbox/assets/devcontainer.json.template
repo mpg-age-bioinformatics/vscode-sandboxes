@@ -1,0 +1,86 @@
+{
+  "name": "R development container",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": "..",
+    "args": {
+      "BASE_IMAGE": "ghcr.io/rocker-org/devcontainer/r-ver:__R_VERSION__"
+    }
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "remoteUser": "rstudio",
+  "containerUser": "rstudio",
+  "updateRemoteUserUID": true,
+  "init": true,
+  "securityOpt": [
+    "seccomp=${localWorkspaceFolder}/code/.sandbox/agent-sandbox-seccomp.json"
+  ],
+  "shutdownAction": "none",
+  "runArgs": [
+    "--network=host"
+  ],
+  "features": {
+    "ghcr.io/devcontainers/features/node:2.1.2": {
+      "version": "22.22.1",
+      "nvmVersion": "0.41.0",
+      "pnpmVersion": "none"
+    }
+  },
+  "mounts": [
+    "source=vscode-r-home,target=/home/rstudio,type=volume",
+    "source=vscode-r-library,target=${localWorkspaceFolder}/.r-library,type=volume",
+    "source=${localEnv:HOME}/.codex,target=/home/rstudio/.codex,type=bind",
+    "source=${localEnv:HOME}/.claude,target=/home/rstudio/.claude,type=bind",
+    "source=${localEnv:HOME}/.continue,target=/home/rstudio/.continue,type=bind",
+    "source=${localEnv:HOME}/.local/share/vscode-sandboxes/certificates,target=/usr/local/share/vscode-sandboxes/certificates,type=bind,readonly"
+  ],
+  "containerEnv": {
+    "HTTP_PROXY": "${localEnv:HTTP_PROXY}",
+    "HTTPS_PROXY": "${localEnv:HTTPS_PROXY}",
+    "NO_PROXY": "${localEnv:NO_PROXY}",
+    "http_proxy": "${localEnv:http_proxy}",
+    "https_proxy": "${localEnv:https_proxy}",
+    "no_proxy": "${localEnv:no_proxy}",
+    "SSL_CERT_FILE": "/usr/local/share/vscode-sandboxes/certificates/ca-certificates.crt",
+    "REQUESTS_CA_BUNDLE": "/usr/local/share/vscode-sandboxes/certificates/ca-certificates.crt",
+    "NODE_EXTRA_CA_CERTS": "/usr/local/share/vscode-sandboxes/certificates/ca-certificates.crt",
+    "CURL_CA_BUNDLE": "/usr/local/share/vscode-sandboxes/certificates/ca-certificates.crt",
+    "GIT_SSL_CAINFO": "/usr/local/share/vscode-sandboxes/certificates/ca-certificates.crt",
+    "R_LIBS_USER": "${localWorkspaceFolder}/.r-library",
+    "RENV_PATHS_LIBRARY": "${localWorkspaceFolder}/.r-library"
+  },
+  "remoteEnv": {
+    "PATH": "/home/rstudio/.local/bin:${containerEnv:PATH}"
+  },
+  "postCreateCommand": "bash code/.sandbox/initialize-development-container.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "REditorSupport.r",
+        "RDebugger.r-debugger",
+        "quarto.quarto",
+        "openai.chatgpt",
+        "anthropic.claude-code",
+        "Continue.continue@2.0.0"
+      ],
+      "settings": {
+        "r.alwaysUseActiveTerminal": false,
+        "r.bracketedPaste": false,
+        "r.plot.useHttpgd": true,
+        "r.sessionWatcher": true,
+        "workbench.panel.defaultLocation": "bottom",
+        "workbench.sideBar.location": "left",
+        "workbench.startupEditor": "none",
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "extensions.ignoreRecommendations": true,
+        "remote.extensionKind": {
+          "Continue.continue": [
+            "workspace"
+          ]
+        },
+        "workbench.secondarySideBar.defaultVisibility": "visible"
+      }
+    }
+  }
+}

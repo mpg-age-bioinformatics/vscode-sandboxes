@@ -10,7 +10,6 @@ func main() {
 		ShellLauncher:  "run-r-sandbox.sh",
 		VersionPrompt:  "R version (major.minor or major.minor.patch)",
 		NeedsVersion:   true,
-		NeedsPodman:    true,
 		DefaultVersion: "4.5",
 	})
 }

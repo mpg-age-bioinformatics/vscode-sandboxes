@@ -27,7 +27,6 @@ type Config struct {
 	ShellLauncher  string
 	VersionPrompt  string
 	NeedsVersion   bool
-	NeedsPodman    bool
 	DefaultVersion string
 }
 
@@ -74,13 +73,13 @@ func Main(config Config) {
 				err = runProject(config)
 			} else {
 				var deps dependencies
-				deps, err = checkDependencies(config.NeedsPodman)
+				deps, err = checkDependencies()
 				if err == nil {
 					err = run(config, deps, setupSelection{selected.Version, selected.Agent, selected.Project})
 				}
 				if err == nil {
 					var launcher string
-					launcher, err = cygpath(deps.bash, filepath.Join(selected.Project, "code", config.ShellLauncher))
+					launcher, err = cygpath(deps.bash, filepath.Join(selected.Project, "code", ".sandbox", config.ShellLauncher))
 					if err == nil {
 						err = runVisible(deps.bash, launcher, selected.Agent)
 					}
@@ -94,17 +93,17 @@ func Main(config Config) {
 		return
 	}
 	home, _ := os.UserHomeDir()
-	c := startui.Config{Name: config.AppName, Slug: config.SandboxSlug, Version: config.DefaultVersion, VersionLabel: config.VersionPrompt, Agent: "codex", Project: filepath.Join(home, "Desktop", config.SandboxSlug+"-project")}
+	c := startui.Config{Name: config.AppName, Slug: config.SandboxSlug, Version: config.DefaultVersion, VersionLabel: config.VersionPrompt, Agent: "both", Project: filepath.Join(home, "sandboxes", config.SandboxSlug+"-project")}
 	if !config.NeedsVersion {
 		c.VersionLabel = ""
 	}
 	if config.Unified {
-		c = startui.Config{Name: "VS Code Sandboxes", Slug: "sandboxes", Version: "3.13", VersionLabel: "Python version", Agent: "codex", Project: filepath.Join(home, "Desktop", "python-sandbox-project"), Sandboxes: startui.Catalog()}
+		c = startui.Config{Name: "VS Code - Docker Sandboxes", Slug: "sandboxes", Version: "3.13", VersionLabel: "Python version", Agent: "both", Project: filepath.Join(home, "sandboxes", "python-sandbox-project"), Sandboxes: startui.Catalog()}
 	}
 	if invokedAsProjectRunner(config, executablePath()) {
 		c.ProjectMode = true
-		c.Project = filepath.Dir(filepath.Dir(executablePath()))
-		agent, _ := os.ReadFile(filepath.Join(c.Project, "code", "."+config.SandboxSlug+"-agent"))
+		c.Project = filepath.Dir(filepath.Dir(filepath.Dir(executablePath())))
+		agent, _ := os.ReadFile(filepath.Join(c.Project, "code", ".sandbox", "."+config.SandboxSlug+"-agent"))
 		c.Agent = strings.TrimSpace(string(agent))
 	}
 	err := startui.Run(c, func(selected startui.Selection, log io.Writer) error {
@@ -125,7 +124,7 @@ func Main(config Config) {
 	}
 }
 
-func checkDependencies(needsPodman bool) (dependencies, error) {
+func checkDependencies() (dependencies, error) {
 	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
 		return dependencies{}, errors.New("this executable requires 64-bit Windows on an Intel or AMD processor")
 	}
@@ -165,15 +164,7 @@ func checkDependencies(needsPodman bool) (dependencies, error) {
 	if err := runVisible(sbx, "diagnose"); err != nil {
 		return dependencies{}, fmt.Errorf("Docker Sandboxes diagnostics failed after SSH setup; confirm virtualization is enabled and run 'sbx login': %w", err)
 	}
-	if needsPodman {
-		podman, err := requireCommand("podman.exe", "Install Podman, then run podman machine init (once) and podman machine start.")
-		if err != nil {
-			return dependencies{}, err
-		}
-		if err := checkPodmanConnection(podman); err != nil {
-			return dependencies{}, err
-		}
-	}
+
 	if err := addVSCodeToPath(); err != nil {
 		return dependencies{}, err
 	}
@@ -240,8 +231,8 @@ func ensureJSONCStringSetting(path, key, value string) (bool, error) {
 }
 
 func run(config Config, deps dependencies, selection setupSelection) error {
-	if selection.agent != "codex" && selection.agent != "claude" {
-		return errors.New("agent must be codex or claude")
+	if selection.agent != "both" && selection.agent != "codex" && selection.agent != "claude" {
+		return errors.New("unsupported legacy agent argument")
 	}
 	if config.NeedsVersion && !regexp.MustCompile(`^[0-9]+\.[0-9]+(\.[0-9]+)?$`).MatchString(selection.version) {
 		return errors.New("version must use major.minor or major.minor.patch format")
@@ -259,6 +250,10 @@ func run(config Config, deps dependencies, selection setupSelection) error {
 		return fmt.Errorf("create project directory: %w", err)
 	}
 
+	if existing := startui.ExistingProject(project); existing != nil {
+		fmt.Println("Reopening the existing sandbox project; skipping project scaffolding.")
+		return nil
+	}
 	tempRoot, err := os.MkdirTemp("", config.SandboxSlug+"-app-*")
 	if err != nil {
 		return err
@@ -300,7 +295,7 @@ func run(config Config, deps dependencies, selection setupSelection) error {
 	}, args...); err != nil {
 		return fmt.Errorf("sandbox setup failed: %w", err)
 	}
-	runner := filepath.Join(project, "code", config.ProjectRunner)
+	runner := filepath.Join(project, "code", ".sandbox", config.ProjectRunner)
 	if info, err := os.Stat(runner); err != nil || info.IsDir() {
 		return fmt.Errorf("setup did not create the Windows project runner: %s", runner)
 	}
@@ -332,7 +327,7 @@ func runProject(config Config) error {
 		return fmt.Errorf("read project runner configuration: %w", err)
 	}
 	agent := strings.TrimSpace(string(agentData))
-	if agent != "codex" && agent != "claude" {
+	if agent != "both" && agent != "codex" && agent != "claude" {
 		return errors.New("the project runner has an invalid configured agent")
 	}
 	launcher := filepath.Join(codeDir, config.ShellLauncher)
@@ -351,7 +346,7 @@ func runProject(config Config) error {
 		return err
 	}
 	cmd := startui.Command(bash, unixLauncher, agent)
-	cmd.Dir = filepath.Dir(codeDir)
+	cmd.Dir = filepath.Dir(filepath.Dir(codeDir))
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -463,21 +458,6 @@ func requireCommand(name, help string) (string, error) {
 		return "", fmt.Errorf("%s is required. %s", name, help)
 	}
 	return path, nil
-}
-
-func checkPodmanConnection(podman string) error {
-	output, err := startui.Command(podman, "info", "--format", "{{.Host.OS}}").CombinedOutput()
-	if err != nil {
-		detail := strings.TrimSpace(string(output))
-		if detail == "" {
-			detail = err.Error()
-		}
-		return fmt.Errorf("Podman is unavailable; run podman machine init (once) and podman machine start, then retry: %s", detail)
-	}
-	if strings.ToLower(strings.TrimSpace(string(output))) != "linux" {
-		return fmt.Errorf("Podman must use Linux containers; detected %q", strings.TrimSpace(string(output)))
-	}
-	return nil
 }
 
 func isUNCPath(path string) bool {

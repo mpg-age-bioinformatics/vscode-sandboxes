@@ -7,3 +7,6 @@
 
 # Data directories and versioned data archives at every depth.
 data*/
+
+# Startup agent selection is generated; it contains no credentials.
+code/.sandbox/.sandbox-agent.json

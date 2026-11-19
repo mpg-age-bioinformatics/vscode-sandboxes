@@ -7,5 +7,12 @@
     "openai.chatgpt",
     "anthropic.claude-code",
     "Continue.continue"
-  ]
+  ],
+  "remote.extensionKind": {
+    "Continue.continue": [
+      "workspace"
+    ]
+  },
+  "workbench.sideBar.location": "left",
+  "workbench.secondarySideBar.defaultVisibility": "visible"
 }

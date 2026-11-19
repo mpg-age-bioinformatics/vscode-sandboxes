@@ -17,7 +17,7 @@ func TestUnifiedDispatchConfigurations(t *testing.T) {
 		if !invokedAsProjectRunner(c, `C:\project\code\`+c.ProjectRunner) {
 			t.Fatal("unified project runner cannot resolve", c)
 		}
-		if item.Slug == "bioinformatics-sandbox" && (c.NeedsVersion || c.NeedsPodman) {
+		if item.Slug == "bioinformatics-sandbox" && c.NeedsVersion {
 			t.Fatal("general sandbox acquired language dependencies")
 		}
 	}

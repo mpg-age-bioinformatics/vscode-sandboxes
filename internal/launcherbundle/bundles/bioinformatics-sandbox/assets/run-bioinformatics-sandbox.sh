@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-agent="${1:-}"
-if [[ "$agent" != "codex" && "$agent" != "claude" ]]; then
-  echo "Usage: $0 <codex|claude>" >&2
+agent="${1:-both}"
+if [[ "$agent" != "both" && "$agent" != "codex" && "$agent" != "claude" ]]; then
+  echo "Usage: $0 [both]" >&2
   exit 2
 fi
 
-project_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+agent=both
+project_root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 windows_git_bash=0
 case "${OSTYPE:-}:${MSYSTEM:-}" in
   msys*:MINGW* | cygwin*:MINGW*) windows_git_bash=1 ;;
@@ -56,7 +57,8 @@ else
 fi
 workspace_id="$(printf '%s:%s' "$workspace_key" "$workspace_stat" | cksum | awk '{print $1}')"
 
-sandbox_name="bio-${project_name}-${workspace_id}-${agent}"
+sandbox_name="bio-${project_name}-${workspace_id}"
+if [[ -n "${VSCODE_SANDBOX_REUSE_NAME:-}" ]]; then sandbox_name="$VSCODE_SANDBOX_REUSE_NAME"; fi
 if ! command -v sbx >/dev/null 2>&1; then
   echo "Error: Docker Sandboxes CLI (sbx) is not installed on the host." >&2
   exit 1
@@ -91,7 +93,7 @@ if native_exec sbx ls --quiet | grep -Fqx "$sandbox_name"; then
   fi
   native_exec sbx run --detached --name "$sandbox_name"
 else
-  native_exec sbx run --detached ${startup_args[@]+"${startup_args[@]}"} --name "$sandbox_name" "$agent" "$(host_path "$project_root")"
+  native_exec sbx run --detached ${startup_args[@]+"${startup_args[@]}"} --name "$sandbox_name" shell "$(host_path "$project_root")"
 fi
 
 if [[ -n "${VSCODE_SANDBOX_STARTUP_HELPER:-}" ]]; then
@@ -132,11 +134,18 @@ native_exec sbx exec --user root "$sandbox_name" sh -ec '
   XDG_RUNTIME_DIR=/run/user/0 podman --storage-driver=vfs --events-backend=file info >/dev/null
 '
 
-sandbox_project_root="$(native_exec sbx exec "$sandbox_name" sh -c 'pwd -P')"
+sandbox_project_root="$(native_exec sbx exec "$sandbox_name" sh -c 'pwd -P' | tail -n 1)"
 case "$sandbox_project_root" in
   /*) ;;
   *) echo "Error: could not determine the project path inside the sandbox: $sandbox_project_root" >&2; exit 1 ;;
 esac
+
+native_exec sbx exec --workdir "$sandbox_project_root" "$sandbox_name" bash code/.sandbox/install-coding-agents.sh
+native_exec sbx exec --workdir "$sandbox_project_root" "$sandbox_name" bash code/.sandbox/setup-continue.sh
+
+if [[ -n "${VSCODE_SANDBOX_STARTUP_HELPER:-}" ]]; then
+  native_exec "$VSCODE_SANDBOX_STARTUP_HELPER" --startup-ready "$sandbox_name" "$agent"
+fi
 
 if [[ "${BIOINFORMATICS_SANDBOX_SKIP_VSCODE:-0}" == "1" ]]; then
   echo "Skipped VS Code setup because BIOINFORMATICS_SANDBOX_SKIP_VSCODE=1."
@@ -173,12 +182,12 @@ fi
 
 native_exec "$code_cli" --install-extension ms-vscode-remote.remote-ssh
 remote_authority="ssh-remote+${sandbox_name}.sbx"
-required_extensions=(ms-python.python ms-python.vscode-pylance ms-toolsai.jupyter REditorSupport.r openai.chatgpt anthropic.claude-code Continue.continue)
+required_extensions=(ms-python.python ms-python.vscode-pylance ms-toolsai.jupyter REditorSupport.r openai.chatgpt anthropic.claude-code)
 for extension in "${required_extensions[@]}"; do
   native_exec "$code_cli" --remote "$remote_authority" --install-extension "$extension"
 done
 remote_extensions="$(native_exec "$code_cli" --remote "$remote_authority" --list-extensions | tr '[:upper:]' '[:lower:]')"
-for extension in "${required_extensions[@]}"; do
+for extension in "${required_extensions[@]}" Continue.continue; do
   if ! printf '%s\n' "$remote_extensions" | grep -Fxiq "$(printf '%s' "$extension" | tr '[:upper:]' '[:lower:]')"; then
     echo "Error: VS Code extension was not installed in $remote_authority: $extension" >&2
     exit 1

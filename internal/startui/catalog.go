@@ -11,14 +11,13 @@ type SandboxType struct {
 	Name         string `json:"name"`
 	Version      string `json:"version"`
 	VersionLabel string `json:"versionLabel"`
-	NeedsPodman  bool   `json:"needsPodman"`
 }
 
 func Catalog() []SandboxType {
 	return []SandboxType{
-		{"python-sandbox", "Python", "3.13", "Python version", true},
-		{"r-sandbox", "R", "4.5", "R version", true},
-		{"bioinformatics-sandbox", "General bioinformatics", "", "", false},
+		{"python-sandbox", "Python", "3.13", "Python version"},
+		{"r-sandbox", "R", "4.5", "R version"},
+		{"bioinformatics-sandbox", "General bioinformatics", "", ""},
 	}
 }
 
@@ -32,6 +31,14 @@ func FindSandbox(slug string) (SandboxType, error) {
 }
 
 func resolveSelection(config Config, selected Selection) (Selection, error) {
+	if existing := ExistingProject(selected.Project); existing != nil {
+		if config.ProjectMode && config.Slug != existing.Sandbox {
+			return selected, fmt.Errorf("This folder belongs to %s.", existing.Sandbox)
+		}
+		selected.Sandbox, selected.Version = existing.Sandbox, existing.Version
+	}
+	// Ignore old saved agent choices: every environment includes both agents.
+	selected.Agent = "both"
 	if len(config.Sandboxes) == 0 {
 		if selected.Sandbox != "" && selected.Sandbox != config.Slug {
 			return selected, fmt.Errorf("This project launcher is configured for %s.", config.Slug)

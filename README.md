@@ -1,17 +1,20 @@
-# VS Code Sandboxes
+# VS Code - Docker Sandboxes
 
 One macOS application or Windows executable that creates reproducible development environments
 with Docker Sandboxes and opens them in Visual Studio Code. Choose **Python**, **R**,
 or **General bioinformatics** in the same startup window.
 
 Each sandbox keeps project files on your computer while running the development tools,
-language runtime, and selected coding agent in an isolated sandbox.
+language runtime, and both Codex and Claude Code in an isolated sandbox.
 
 The unified launcher is self-contained and includes all three sandbox types. Their setup scripts, runtime
 launchers, templates, and editor configuration are packaged from this repository.
 Setup uses a sparse checkout of the separate `skills/` repository containing only
 `match-code-data` and `set-vscode-r-version` for Codex and Claude to discover, but launcher setup and execution never load or
 copy launcher files from that clone.
+If an existing `skills/` Git repository has no origin, setup first prepares a fresh
+clone, preserves the original in `skills.backup.XXXXXX/skills`, and reports the backup
+location. A different origin or a Git configuration error stops setup without replacing it.
 
 ## Contents
 
@@ -43,15 +46,15 @@ copy launcher files from that clone.
 
 ### Python Sandbox
 
-Python Sandbox creates a project pinned to the Python version you choose. It sets
-up a project-local virtual environment, Jupyter support, VS Code extensions, and
-either Codex or Claude Code.
+Python Sandbox starts a general Docker-enabled sandbox and pulls the selected Python
+image inside it. VS Code opens its development container with a project virtual
+environment, Jupyter extensions, and either Codex or Claude Code.
 
 ### R Sandbox
 
-R Sandbox creates a project pinned to the R major/minor series you choose. It
-sets up a project-local R library with `renv`, R language tooling, Quarto, VS Code
-extensions, and either Codex or Claude Code.
+R Sandbox starts a general Docker-enabled sandbox and pulls the selected R
+major/minor image inside it. VS Code opens its development container with a
+project R library managed by `renv`, R language tooling, Quarto, and both coding agents.
 
 ### Bioinformatics Sandbox
 
@@ -61,21 +64,44 @@ code/data layout, VS Code tooling, and either Codex or Claude Code.
 
 ## Startup window and connection settings
 
-Open **VS Code Sandboxes** and choose the sandbox type at the top of the startup window.
-Python and R show their own version fields; general bioinformatics has no version
-field. Changing types updates the suggested folder while preserving an edited
-folder path. The last successful choice is remembered. Workspace settings, internet
-access, Codex endpoints, and live startup activity remain in this one window.
+Open **VS Code - Docker Sandboxes** and select the **Project folder** first. Type
+its path or click **Browse…** to choose or create a folder. Editing the field does
+not open the picker. Then choose the sandbox type and Python/R version for a new
+project. Changing types keeps your selected folder.
+
+When the folder already contains a sandbox project, the launcher restores its
+language/version and offers **Restart sandbox**. It runs the existing project
+launcher without cloning skills or regenerating setup files. Successfully
+initialized Python/R containers are restarted and verified without reinstalling
+the environment. Missing containers are recreated from the existing setup.
+User edits and staged changes remain untouched on restarts.
+
+**Export activity…**, on the right of **Startup activity**, saves a text snapshot
+of the startup log and any error. It remains available during startup and after
+failure. API keys are redacted. macOS uses a Save dialog; Windows downloads the
+text file through Edge.
+
+New project suggestions live under `~/sandboxes` (the `sandboxes`
+folder in your home directory on Windows). This keeps projects outside protected
+personal folders and normally avoids needing Full Disk Access on macOS. Choosing
+another location opens an explanation with **Use ~/sandboxes**, **Keep selected
+folder**, and **Cancel**. Existing saved projects keep their original path and get
+the same review; choosing the recommended path never moves or deletes their files.
+Generated project launchers remain bound to their existing project.
+
 Terminal is not opened. Windows uses Microsoft Edge in app mode (Edge must be installed);
 macOS uses a native WebKit window. Generated project apps/executables show the same
-internet and Codex connection choices every time you open a workspace.
+internet and AI connection choices every time you open a workspace.
 
 Choose **No internet**, **Selected sites**, or **Open** before starting. Selected
 sites accepts comma-separated hostnames, `*.example.org` or `**.example.org`
-subdomain patterns, and optional ports. Include your private endpoint and any
-package registries needed for setup. The restrictions apply to the sandbox;
-host Git clones, image builds/downloads, Docker authentication, and host VS Code
-installation still use the host connection. A first launch without package
+subdomain patterns, and optional ports. A private endpoint’s host is added
+automatically with a warning. Private
+endpoints cannot be used with No internet; startup is blocked with an explanation.
+Include any additional package registries needed for setup. The restrictions apply to the sandbox;
+host Git clones, base sandbox-template downloads, Docker authentication, and host
+VS Code installation still use the host connection. Python/R image pulls, feature
+builds, and dependency installation run inside the sandbox and obey its policy. A first launch without package
 registry access can fail until its dependencies have been prepared.
 
 Docker's local default network preset is shared. If Selected sites needs a
@@ -87,6 +113,20 @@ shared policy unchanged. The app never resets the shared policy without this
 confirmation. A new Docker installation with no preset is initialized to the
 chosen mode. Existing organization policies can further restrict access.
 
+**Selected sites** starts with editable defaults for container registries and their
+layer-download hosts, npm/Node, GitHub, Linux packages, and VS Code installation.
+Python adds PyPI and Conda hosts; R adds CRAN, Bioconductor, and R-universe hosts;
+General bioinformatics includes both sets. Each type retains its own edits.
+Use **Restore default sites** to reset that type's list. Only the displayed list
+is applied. Add model endpoints, private registries, custom package mirrors, or
+additional redirect hosts when needed; arbitrary registries and mirrors cannot
+all be covered by a fixed list.
+
+The registry and editor defaults follow [Docker's allowlist](https://docs.docker.com/desktop/enterprise/allow-list/),
+[GitHub's registry/download hosts](https://docs.github.com/en/actions/reference/runners/self-hosted-runners),
+[Microsoft's registry firewall guidance](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-prevent-data-loss-exfiltration),
+and [VS Code's network requirements](https://code.visualstudio.com/docs/setup/network).
+
 Each workspace starts behind a deny-all guard while connection settings and
 network rules are applied. Selected sites requires a deny-by-default preset;
 extra kit/global destinations are blocked for that workspace. If an existing
@@ -94,28 +134,74 @@ broad rule cannot be narrowed safely, startup stops with the guard in place.
 This uses Docker's hostname-based enforcement and inherits its documented
 [hostname blocking limitations](https://docs.docker.com/ai/governance/local/network-rules/).
 
-For Codex, choose **Private endpoint** to import a `config.toml` or enter an
-OpenAI Responses-compatible URL, model ID, and optional API key. The app discovers
-an existing private configuration under `$CODEX_HOME/config.toml` or
-`~/.codex/config.toml`; saved launcher settings take priority. For a new endpoint,
-clear the existing TOML path and enter the fields. Imported provider settings
-preserve query parameters and custom headers. Host `env_key` and
-`env_http_headers` credentials are resolved from the app's environment; an API key
-entered in the form overrides `env_key`. Host authentication commands and gateway
-OAuth need a separate sandbox-compatible configuration and are rejected with
-instructions. Other host settings such as hooks and MCP commands are not imported.
+The **Private endpoint (optional)** card shows the endpoint URL and separate
+sandbox API key side by side. Leave both blank for the default OpenAI connection
+in Codex. Enter both to use a private endpoint in Continue; Codex remains available
+for OpenAI with its own sandbox sign-in. There is no connection dropdown, model
+picker, or connection-file workflow in startup.
 
-Reusable files are stored outside the repository:
+Private startup fetches `/models` with the supplied sandbox API key and writes the
+available IDs and routing aliases into `~/.continue/config.yaml` inside the sandbox.
+Choose a model in Continue. The configuration uses Continue's OpenAI-compatible
+provider, chat/edit/apply roles, and `/chat/completions`. An empty list or discovery
+failure stops startup. No reusable configuration file or cached Codex TOML is
+created on the host. Existing sandbox Continue settings are backed up and restored
+when starting with both private fields blank.
+
+The distributed launcher installs Continue **2.0.0** inside the Linux sandbox
+before VS Code opens, with enabled tools defaulting to **Automatic**, including
+file edits and terminal commands. Excluded tools remain excluded and Continue's
+runtime file/command checks remain in place. These are distribution defaults,
+not a copy of the launcher's author's IDE preferences; explicit user changes in
+Continue can still override them. This applies to fresh Python, R, and general
+bioinformatics sandboxes on macOS and Windows.
+
+Because this Continue version exposes IDE policies as user UI state rather than
+model-YAML settings, preparation adjusts the pinned extension's built-in defaults
+and GUI fallback inside the sandbox. The official Marketplace archive is verified
+against a platform-specific SHA-256 before extraction; the exact policy layout is
+checked before changing it. The extension is marked pinned, its license is retained,
+and prepared artifacts are cached for offline reuse. A version/checksum/layout
+mismatch stops startup; changing versions requires reviewing the defaults again.
+The launcher never changes the host's Continue extension or copies host tool-policy
+state. Initial setup requires the displayed VS Code Marketplace/CDN hosts.
+
+Before a private startup, the launcher sets `remote.extensionKind` for
+`Continue.continue` to `["workspace"]` in local VS Code user settings. VS Code
+chooses the extension host before container/workspace settings arrive, so this
+local setting is needed when Continue is also installed on the host. It applies
+to Continue in remote VS Code windows; other extension settings and comments are
+preserved. Host Continue model settings and credentials are not changed.
+
+Continue runs as a workspace extension inside the container, with its sandbox-only
+configuration mounted into its home directory. Existing containers also receive
+the configuration before VS Code opens. The primary sidebar stays left and the
+secondary agent sidebar stays visible on the right. Continue appears with the
+other AI panes there; VS Code retains the user's view arrangement. If changing
+an already open IDE, run **Developer: Reload Window** to reload extension placement
+and configuration. The endpoint URL and private API key remain required.
+
+For a LiteLLM/OpenAI-compatible gateway, enter its **Endpoint URL** and separate
+**API key**. Startup sends a host-side `GET` to the base URL with `/models`
+appended (for example, `/v1/models`) and a Bearer authorization header, then makes
+the returned models available in Continue. Choose the model there. The key remains masked in the startup window for that session and is
+not saved in launcher preferences. Model discovery follows only same-origin redirects
+and never sends the key to a different origin. Sandbox network settings still
+govern subsequent agent requests inside the sandbox.
+
+The private API key is required whenever a private URL is entered. It is readable
+by agents inside the sandbox and travels through a private temporary startup
+manifest and the sandbox's own Continue configuration. It is never saved in
+launcher preferences, project files, or host Continue settings. URL query
+parameters are stripped except a validated `api-version` value. Host sign-in files
+and host environment credentials are not imported.
+
+Launcher preferences live outside the project:
 
 - macOS: `~/Library/Application Support/VS Code Sandboxes/`;
 - Windows: `%AppData%\VS Code Sandboxes\`.
 
-`endpoints/private.toml` contains the saved provider and any API key as a static
-bearer token, protected with user-only file permissions on macOS and inherited
-user-profile access on Windows. Keys are not stored in the UI preference JSON or
-project Git history. The connection is installed in the sandbox user's
-`~/.codex/config.toml`, where both Codex CLI and the Remote-SSH Codex extension
-can read it. Switching back to Default restores the sandbox's previous config.
+Each agent's sandbox sign-in state survives container recreation.
 An endpoint on the host must use a hostname reachable from the sandbox;
 `localhost` inside the sandbox refers to the sandbox itself.
 
@@ -127,7 +213,6 @@ Docker Sandboxes currently requires an Apple silicon Mac running macOS Sonoma
 14 or newer. Install and configure:
 
 - [Git](https://git-scm.com/download/mac);
-- for **Python Sandbox** and **R Sandbox** only, [Podman](https://podman.io/) with an initialized, running Podman machine;
 - [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/install/) with the
   `sbx` command, version 0.39.0 or newer;
 - [Visual Studio Code](https://code.visualstudio.com/docs/setup/mac) for macOS;
@@ -137,15 +222,19 @@ Docker Sandboxes currently requires an Apple silicon Mac running macOS Sonoma
 The startup app runs `sbx login` automatically when Docker authentication is required.
 Complete the browser sign-in when prompted. You can also sign in ahead of time with `sbx login`.
 
-**Before opening Python Sandbox or R Sandbox, run `podman machine init` once,
-then `podman machine start`.** This applies on macOS and Windows. Bioinformatics
-Sandbox does not require host Podman. Docker Desktop is not required by any launcher.
+**Host Docker Desktop, Docker Engine, and Podman are not required.** The standard
+shell sandbox provides its own Docker Engine for Python/R development containers.
+Install VS Code's Remote-SSH and Dev Containers extensions; the launcher also
+checks/installs those extensions before opening the workspace.
 
 The first setup also requires an internet connection to clone the agent skills,
 download container images, and install VS Code extensions.
 
-The setup initializes a Git repository and makes an initial commit. Configure your
-Git name and email first if you have not already done so:
+New projects get one initial commit containing the completed setup, including
+files generated during runtime initialization, before VS Code opens. Existing
+repositories get focused setup commits without including unrelated user edits.
+If Git identity is missing, setup uses `Sandbox Launcher <sandbox@localhost>`
+in that repository only. You can configure your own identity beforehand:
 
 ```bash
 git config --global user.name "Your Name"
@@ -174,26 +263,16 @@ git config --global --get user.email
 0.39.0 or newer, and `sbx diagnose` must finish without failed checks. The
 `sbx login` command is interactive; complete the sign-in before continuing.
 
-For Python Sandbox or R Sandbox, initialize/start the Podman machine and verify it:
-
-```bash
-podman machine init # once only
-podman machine start
-podman version
-podman info --format '{{.Host.OS}}'
-```
-
-The final command must print `linux`. Bioinformatics Sandbox does not require
-these Podman checks. If either Git identity command prints nothing, configure
-the missing value before running a launcher.
+If either Git identity command prints nothing, configure the missing value
+before running a launcher. No host container-runtime checks are needed.
 
 ### Install the macOS application
 
 1. Download **VS-Code-Sandboxes.dmg** from the release assets (or use the
    locally built [disk image](sandbox-launcher/assets/VS-Code-Sandboxes.dmg)).
 2. Open the disk image.
-3. Drag **VS Code Sandboxes** to **Applications**.
-4. Eject the disk image and open **VS Code Sandboxes**.
+3. Drag **VS Code - Docker Sandboxes** to **Applications**.
+4. Eject the disk image and open **VS Code - Docker Sandboxes**.
 5. Choose **Python**, **R**, or **General bioinformatics** in the startup window.
 
 The app includes all three setup payloads; no separate language launcher is needed.
@@ -224,19 +303,20 @@ page under **Assets** and verify its checksum instead.
 
 ### Create projects on macOS
 
-1. Open **VS Code Sandboxes** from Applications.
+1. Open **VS Code - Docker Sandboxes** from Applications.
 2. Choose **Python**, **R**, or **General bioinformatics**.
 3. For Python or R, choose a `major.minor` or `major.minor.patch` version.
    The environment uses that major/minor series; R selects its latest Rocker patch.
-4. Choose the coding agent, project folder, sandbox internet access, and Codex
+4. Choose the project folder, sandbox internet access, and Codex
    connection. The folder is created if needed.
 5. Select **Start sandbox** and follow progress in the same window. Complete
    browser sign-in if Docker requests it.
-6. Wait for VS Code to open the workspace through Remote-SSH.
+6. Wait for VS Code to open the Python/R development container through the sandbox
+   SSH connection. General bioinformatics opens directly in the sandbox.
 
-Initial image builds and dependency installation can take several minutes.
-Python and R need host Podman for image building. General bioinformatics does
-not require host Podman; workload containers use Podman inside the sandbox.
+Initial image downloads, container feature setup, and dependency installation can
+take several minutes. No language runtime is installed on the host. General
+bioinformatics continues to use Podman inside its sandbox for workload containers.
 
 ## Windows
 
@@ -253,21 +333,14 @@ Install these prerequisites first:
 - the Windows OpenSSH Client optional feature;
 - [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/install/) 0.39.0 or
   newer, then complete the browser sign-in when the startup app requests it;
-- [Visual Studio Code](https://code.visualstudio.com/) and access to Codex or
-  Claude Code; and
-- for **Python Sandbox** and **R Sandbox** only, [Podman](https://podman.io/)
-  with an initialized, running Podman machine.
+- [Visual Studio Code](https://code.visualstudio.com/) with Remote-SSH and Dev
+  Containers extensions, and access to Codex or Claude Code.
 
 Use a project folder on a local Windows drive. Network shares and WSL UNC paths
 are rejected because they do not provide the local filesystem behavior required
-by mounted sandbox workspaces. Python Sandbox and R Sandbox use host Podman to
-build templates and export Docker-compatible archives for `sbx template load`.
-
-Bioinformatics Sandbox does not require host Podman. All three launchers install
-Podman inside the sandbox for workload containers. Docker Desktop is not required.
-
-Before opening Python Sandbox or R Sandbox, run `podman machine init` once and
-`podman machine start`. Verify `podman info` succeeds before launching.
+by mounted sandbox workspaces. Python and R pull and run their language images
+using Docker inside a standard shell sandbox. They do not invoke host Docker or
+Podman. General bioinformatics uses sandbox-local Podman for its workload containers.
 
 ### Verify Windows requirements before downloading
 
@@ -300,18 +373,6 @@ Git's bundled SSH client. If Git Bash was installed somewhere else, replace its
 path in the command above. If either Git identity command prints nothing,
 configure the missing value before running a launcher.
 
-For Python Sandbox or R Sandbox, initialize/start the Podman machine and run:
-
-```powershell
-podman.exe machine init # once only
-podman.exe machine start
-podman.exe version
-podman.exe info --format '{{.Host.OS}}'
-```
-
-The final command must print `linux`. Bioinformatics Sandbox does not require
-these Podman checks.
-
 ### Download the Windows executable
 
 Download **VS-Code-Sandboxes.exe** from the release assets (or use the locally
@@ -339,19 +400,20 @@ If Windows blocks the downloaded executable:
 1. Double-click **VS-Code-Sandboxes.exe**.
 2. Choose **Python**, **R**, or **General bioinformatics**.
 3. Enter the Python or R version when that field is shown.
-4. Choose the agent and an absolute project folder on a local Windows drive.
-5. Choose sandbox internet access and the Codex connection, then select
+4. Choose an absolute project folder on a local Windows drive.
+5. Choose sandbox internet access and the AI connection, then select
    **Start sandbox**.
 6. Follow the activity panel and complete any browser sign-in. Keep the app open
    until VS Code opens the workspace or the app displays a recoverable error.
 
-Python and R require host Podman; general bioinformatics does not. The app checks
-only the dependencies needed by the selected sandbox type.
+Host Docker and Podman are not needed for any selection. Python/R require a
+working Docker Engine inside the standard shell sandbox.
 
 ## Using the generated project
 
 The following sections apply after either the macOS or Windows setup opens the
-project in a VS Code Remote-SSH window.
+project in a VS Code development-container window (Python/R) or Remote-SSH window
+(general bioinformatics).
 
 ### What is created
 
@@ -359,7 +421,8 @@ The selected project directory contains:
 
 ```text
 project/
-├── code/       # Source code, notebooks, launcher, and container recipe
+├── code/       # Source code, notebooks, and the Dockerfile used to build the container
+│   └── .sandbox/ # Sandbox configuration, support scripts, locks, and launchers
 ├── data/       # Project data
 ├── skills/     # Only match-code-data and set-vscode-r-version; ignored by Git
 ├── .vscode/    # VS Code configuration
@@ -367,31 +430,38 @@ project/
 └── .git/
 ```
 
-Every Windows project receives an agent-specific executable in `code/`:
+Every Windows project receives a project executable in `code/.sandbox/`:
 `Run Python Sandbox.exe`, `Run R Sandbox.exe`, or
 `Run Bioinformatics Sandbox.exe`. The installer copies its own self-contained
-executable to this stable project-runner name and records the selected agent. It
+executable to this stable project-runner name with both agents available. It
 is committed with the project.
 
 The project is mounted directly into the sandbox, so edits made in VS Code are
-saved on your computer. The Python virtual environment is stored as `.venv/` in the
-project and is configured as VS Code's interpreter.
+saved on your computer. For Python/R, the same workspace path is bind-mounted
+again into the development container. Python's `.venv/` and R's `.r-library/` are
+backed by Docker volumes inside the sandbox, so Linux packages do not depend on
+Windows-host filesystem symlink behavior. Deleting the sandbox deletes these
+volumes; the tracked declarations and lockfiles restore their contents.
 
 R projects additionally contain `.r-library/`, which is their project-local R
-package library. The launcher runs `code/setup-renv.R` inside the sandbox before
+package library. The container bootstrap runs `code/.sandbox/setup-renv.R` inside the R container before
 opening VS Code. It initializes renv or restores `renv.lock`, installs the pinned
 editor packages locally, and verifies them in a fresh R process, including a
 plot-device smoke test. Commit the generated lockfile and renv activation/settings
 files. The setup uses renv's [bare initialization](https://pkgs.rstudio.com/renv/reference/init.html)
 and snapshots all installed dependencies.
 
-For dependency changes, edit `code/setup-renv.R` with exact versions and update
+Commit `code/.sandbox/bioconductor-config.yaml` too: it saves Bioconductor's R/version mapping
+so the initialized project can reopen offline. Remove that file while online to refresh it
+when deliberately upgrading Bioconductor.
+
+For dependency changes, edit `code/.sandbox/setup-renv.R` with exact versions and update
 `renv.lock` together; install BiocManager separately before Bioconductor packages.
 Both startup and sectioned scripts use `.r-library/`; scripts start with
-`source("code/activate-project.R")` from the project root. Transactional installs
-and the cache are disabled as working settings for this Remote-SSH environment.
+`source("code/.sandbox/activate-project.R")` from the project root. Transactional installs
+and the cache are disabled as working settings for this development-container environment.
 
-For Command+Enter, use **R: Create R terminal** in the Remote-SSH window. The
+For Command+Enter, use **R: Create R terminal** in the development-container window. The
 standard R console uses `r.alwaysUseActiveTerminal: false` and
 `r.bracketedPaste: false`. Interactive plot code should default an editable display
 flag to `interactive()`, check that `getOption("device")` is a function, then use
@@ -407,15 +477,17 @@ rerunning the scaffolding installer.
 
 ### Open the project again
 
-After the first setup, do not run the installer again on Windows. Open the
-project's `code` folder and double-click the generated runner:
+Select the same project folder in the main launcher to restart it. You can also
+open the project's `code/.sandbox` folder and double-click its generated runner:
 
 - **Run Python Sandbox.exe**;
 - **Run R Sandbox.exe**; or
 - **Run Bioinformatics Sandbox.exe**.
 
-The runner already contains the agent selected during setup. It reconnects to the
-existing sandbox when available and opens the project through VS Code Remote-SSH.
+The runner prepares both agents and reconnects to the
+existing sandbox when available. Python/R start or resume their development
+container and open VS Code directly inside it. The general workspace opens through
+Remote-SSH as before.
 
 On macOS, double-click the generated **Run Python Sandbox.app**, **Run R Sandbox.app**,
 or **Run Bioinformatics Sandbox.app**. You can also reopen the installed sandbox app and
@@ -424,12 +496,15 @@ enter the same setup values and project directory.
 The command-line equivalents, run from the project root, are:
 
 ```bash
-./code/run-python-sandbox.sh codex
-./code/run-r-sandbox.sh codex
-./code/run-bioinformatics-sandbox.sh codex
+./code/.sandbox/run-python-sandbox.sh
+./code/.sandbox/run-r-sandbox.sh
+./code/.sandbox/run-bioinformatics-sandbox.sh
 ```
 
-Use `claude` instead of `codex` when the project was configured for Claude Code.
+Both agents are installed in the sandbox and Python/R containers. Run `codex` or
+`claude` in a VS Code terminal, or open the corresponding extension. Each agent
+has its own sign-in and settings. Private endpoint settings are loaded into
+Continue, while Codex uses OpenAI.
 
 ### Working in the sandbox
 
@@ -437,14 +512,49 @@ Use `claude` instead of `codex` when the project was configured for Claude Code.
 - Put datasets in `data/`.
 - Install Python packages into the project `.venv`, not into the host OS.
 - Install R packages into the project `.r-library/` with `renv`, not into the host OS.
-- Build and run specialized workload containers only inside Bioinformatics Sandbox.
+- Python/R tools run in the inner development container. Additional sibling containers
+  can be managed through the outer sandbox's Docker Engine using `sbx exec`.
+- General bioinformatics workload containers continue to use its sandbox-local Podman.
 - Keep dependency declarations and lock files under version control.
-- Use the integrated VS Code terminal after the Remote-SSH window opens; commands
-  there run inside the sandbox.
-- Authenticate the selected coding agent when it requests access. Do not store
+- Use the integrated VS Code terminal: commands run inside the selected Python/R
+  development container, or directly inside the general bioinformatics sandbox.
+- Authenticate the both Codex and Claude Code when it requests access. Do not store
   credentials in the repository.
 
 ## Troubleshooting
+
+### Codex cannot create directories or run commands inside Python/R
+
+If Codex reports `bwrap: No permissions to create new namespace`, Docker's default
+seccomp filter can block Codex's own sandbox even though ordinary terminal
+commands and project writes work. The Python/R templates use
+`code/.sandbox/agent-sandbox-seccomp.json`, derived from Moby's default profile with five
+additional syscall allowances: `clone`, `unshare`, `mount`, `umount2`, and
+`pivot_root`. These enable nested user-namespace sandboxes; all other baseline
+seccomp rules remain intact. This exposes those additional kernel interfaces to
+the inner container and is intended only inside the outer Docker Sandbox microVM.
+It adds no container capabilities, privileged mode, host Docker socket, or host
+filesystem mounts. Codex still enforces its own configured file/network permissions.
+The profile's upstream revision, license, and modification notice are packaged
+alongside it. Startup verifies `codex sandbox -- /bin/true` without calling a model.
+
+Existing containers need the profile added to their configuration and must be
+recreated to use it. Keep project files and named volumes; do not delete them to
+repair this issue. Restarting the inner container interrupts its active sessions.
+
+
+If Git reports `Unable to read current working directory: Operation not permitted`
+on macOS, use **Browse** to choose a project under `~/sandboxes`, or accept the
+recommended location in the folder-review popup. If you keep a protected location,
+allow folder access when prompted, or enable the launcher's access in **System
+Settings → Privacy & Security → Files and Folders**. If the app is absent and
+access remains blocked, you may need to add the installed launcher under **Full
+Disk Access** using **+**, enable it, then quit and reopen the app. Full Disk
+Access is broader than this project needs; it is not required for every custom
+location. If macOS offers access to specific folders, choose only the project.
+Startup checks project read/write access and existing skills-repository access
+before running sandbox diagnostics or changing network policy and reports the
+failing path. The launcher cannot override a macOS access denial.
 
 ### The app cannot be opened
 
@@ -471,13 +581,41 @@ sbx login
 The sandbox apps require Docker Sandboxes CLI 0.39.0 or newer and an authenticated
 Docker Sandboxes session.
 
-### `Podman CLI is required` or Podman is unavailable
+### Docker is unavailable inside a Python/R sandbox
 
-Python Sandbox and R Sandbox require host Podman in addition to Docker Sandboxes.
-Install Podman, run `podman machine init` once, then `podman machine start`, and
-verify `podman info` succeeds. Bioinformatics Sandbox does not require host Podman.
+The launcher uses the standard `shell` agent, which selects Docker's
+`shell-docker` template. `sbx exec <name> docker info` must succeed. Older generated
+custom language-template sandboxes are not reused; the new launchers use distinct
+names ending in `-dev`. If the standard template has no working engine, update
+Docker Sandboxes and recreate the affected sandbox. The launcher stops instead
+of falling back to a host daemon or socket.
 
-### Workload containers inside a sandbox
+### Python/R container configuration and offline starts
+
+`code/Dockerfile` is the development container build recipe.
+`code/.sandbox/devcontainer.json` selects the build, user, mounts, extensions, and
+container lifecycle setup. `code/.sandbox/container-image.lock.json` records the resolved
+immutable base image digest, supplied as the Dockerfile’s `BASE_IMAGE` build argument; `code/.sandbox/devcontainer-lock.json` locks feature content.
+Commit both generated lockfiles. Startup reuses cached images and existing
+containers. To change the base image, update `baseImage` in
+`code/.sandbox/sandbox-runtime.json` and rebuild the development container.
+Keep project-specific build instructions in `code/Dockerfile`. New setups need access to their image
+registry, `ghcr.io`, `registry.npmjs.org`, `nodejs.org`, and the relevant system and
+language package registries. Restricted mode must allow all required destinations;
+there is no temporary open-network bypass. Offline startup requires previously
+prepared images, features, agents, and packages.
+
+Both agent CLIs are installed at pinned versions in the general sandbox and
+inside each Python/R development container.
+Their sign-in/configuration directories are bind-mounted from the sandbox user,
+never from the physical host. Inner containers receive the sandbox's proxy
+settings and certificate bundle. They have no Docker socket mount.
+
+For R, `code/.sandbox/install-r-system-dependencies.sh` records OS dependencies and creates
+`code/.sandbox/r-system-packages.lock` with exact installed versions. Project packages stay
+in `.r-library/` and are locked by `renv.lock`.
+
+### General bioinformatics workload containers
 
 Use `sudo env XDG_RUNTIME_DIR=/run/user/0 podman --storage-driver=vfs --events-backend=file` consistently for
 build/run/exec so all commands use the same sandbox-local store. For builds use
@@ -505,9 +643,10 @@ On macOS, the sandbox apps automatically find `Visual Studio Code.app` in
 
 ### Setup stops while making the Git commit
 
-Configure `user.name` and `user.email` as shown above, then run the application
-again with the same project directory. Existing matching setup files are
-preserved.
+Check the exported startup activity for the Git error (for example, a failing
+hook or a signing requirement). Setup supplies a local fallback identity if
+needed. Resolve the reported error, then reopen the same project folder; the
+launcher preserves its existing files.
 
 ### A project file already exists with different contents
 
@@ -557,7 +696,7 @@ of the Python Software Foundation. The Python icon is a stylized derivative;
 commercial reuse may require separate permission under the
 [PSF trademark policy](https://www.python.org/psf/trademarks/).
 
-Generated projects retain these notices in `code/VS-Code-Sandboxes-LICENSE.txt`
-and `code/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt`. These cover the supplied
+Generated projects retain these notices in `code/.sandbox/VS-Code-Sandboxes-LICENSE.txt`
+and `code/.sandbox/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt`. These cover the supplied
 launcher code and its dependencies; they do not choose a license for your own
 project code.

@@ -44,6 +44,25 @@ func Materialize(slug, destination string) error {
 	if err != nil {
 		return err
 	}
+	if slug == "python-sandbox" || slug == "r-sandbox" || slug == "bioinformatics-sandbox" {
+		entries, err := fs.ReadDir(bundles, "bundles/common/assets")
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			data, err := fs.ReadFile(bundles, "bundles/common/assets/"+entry.Name())
+			if err != nil {
+				return err
+			}
+			mode := os.FileMode(0644)
+			if strings.HasSuffix(entry.Name(), ".sh") {
+				mode = 0755
+			}
+			if err := os.WriteFile(filepath.Join(destination, "assets", entry.Name()), data, mode); err != nil {
+				return err
+			}
+		}
+	}
 	for filename, text := range map[string]string{
 		"LICENSE":                 licensing.License,
 		"THIRD-PARTY-NOTICES.txt": licensing.ThirdPartyNotices,

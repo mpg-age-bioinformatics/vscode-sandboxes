@@ -11,5 +11,5 @@ func configForSandbox(slug string) (Config, error) {
 	if slug == "bioinformatics-sandbox" {
 		name = "Bioinformatics"
 	}
-	return Config{AppName: name + " Sandbox", SandboxSlug: slug, ProjectRunner: "Run " + name + " Sandbox.exe", ShellLauncher: "run-" + slug + ".sh", VersionPrompt: item.VersionLabel, NeedsVersion: item.VersionLabel != "", NeedsPodman: item.NeedsPodman, DefaultVersion: item.Version}, nil
+	return Config{AppName: name + " Sandbox", SandboxSlug: slug, ProjectRunner: "Run " + name + " Sandbox.exe", ShellLauncher: "run-" + slug + ".sh", VersionPrompt: item.VersionLabel, NeedsVersion: item.VersionLabel != "", DefaultVersion: item.Version}, nil
 }

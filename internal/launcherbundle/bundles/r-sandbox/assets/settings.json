@@ -8,5 +8,10 @@
   "workbench.startupEditor": "none",
   "terminal.integrated.defaultProfile.linux": "bash",
   "extensions.ignoreRecommendations": true,
-  "remote.SSH.defaultExtensions": ["REditorSupport.r", "RDebugger.r-debugger", "quarto.quarto", "openai.chatgpt", "anthropic.claude-code", "Continue.continue"]
+  "remote.extensionKind": {
+    "Continue.continue": [
+      "workspace"
+    ]
+  },
+  "workbench.secondarySideBar.defaultVisibility": "visible"
 }
