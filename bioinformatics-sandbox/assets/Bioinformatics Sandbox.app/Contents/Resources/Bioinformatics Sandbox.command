@@ -95,6 +95,9 @@ if ! sbx diagnose; then
 fi
 
 setup_script="$setup_dir/scripts/setup-project.sh"
+export VSCODE_SANDBOX_DESKTOP_RESOURCES="$asset_dir"
+export VSCODE_SANDBOX_PROJECT_APP_TEMPLATE="$setup_dir/assets/Run Bioinformatics Sandbox.app.template"
+export VSCODE_SANDBOX_PROJECT_APP_ICON="$asset_dir/BioinformaticsSandbox.icns"
 
 if [[ -z "$agent" ]]; then
   read -r -p "Agent (codex or claude): " agent

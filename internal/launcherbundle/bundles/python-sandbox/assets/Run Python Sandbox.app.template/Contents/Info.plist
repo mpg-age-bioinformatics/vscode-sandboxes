@@ -7,7 +7,7 @@
   <key>CFBundleExecutable</key>
   <string>run-python-sandbox</string>
   <key>CFBundleIdentifier</key>
-  <string>org.mpg-age-bioinformatics.run-python-sandbox</string>
+  <string>org.mpg-age-bioinformatics.python-sandbox.project</string>
   <key>CFBundleIconFile</key>
   <string>PythonSandbox</string>
   <key>CFBundleName</key>

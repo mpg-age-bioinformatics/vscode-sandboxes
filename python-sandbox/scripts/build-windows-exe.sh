@@ -19,6 +19,6 @@ cd "$repository_root"
   --file-description "Python Sandbox launcher" --product-name "Python Sandbox" \
   --original-filename "Python-Sandbox.exe" --icon "$icon_path"
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
-  -ldflags="-s -w" \
+  -ldflags="-s -w -H windowsgui" \
   -o "$output_path" "./python-sandbox/windows"
 echo "$output_path"

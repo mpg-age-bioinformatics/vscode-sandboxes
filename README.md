@@ -1,12 +1,13 @@
 # VS Code Sandboxes
 
-Downloadable macOS applications and Windows executables that create reproducible development environments
-with Docker Sandboxes and open them in Visual Studio Code.
+One macOS application or Windows executable that creates reproducible development environments
+with Docker Sandboxes and opens them in Visual Studio Code. Choose **Python**, **R**,
+or **General bioinformatics** in the same startup window.
 
 Each sandbox keeps project files on your computer while running the development tools,
 language runtime, and selected coding agent in an isolated sandbox.
 
-The downloadable launchers are self-contained. Their setup scripts, runtime
+The unified launcher is self-contained and includes all three sandbox types. Their setup scripts, runtime
 launchers, templates, and editor configuration are packaged from this repository.
 Setup uses a sparse checkout of the separate `skills/` repository containing only
 `match-code-data` and `set-vscode-r-version` for Codex and Claude to discover, but launcher setup and execution never load or
@@ -18,16 +19,17 @@ copy launcher files from that clone.
   - [Python Sandbox](#python-sandbox)
   - [R Sandbox](#r-sandbox)
   - [Bioinformatics Sandbox](#bioinformatics-sandbox)
+- [Startup window and connection settings](#startup-window-and-connection-settings)
 - [macOS](#macos)
   - [macOS requirements](#macos-requirements)
   - [Verify macOS requirements before downloading](#verify-macos-requirements-before-downloading)
-  - [Install the macOS applications](#install-the-macos-applications)
+  - [Install the macOS application](#install-the-macos-application)
   - [Open an unsigned sandbox app](#open-an-unsigned-sandbox-app)
   - [Create projects on macOS](#create-projects-on-macos)
 - [Windows](#windows)
   - [Windows requirements](#windows-requirements)
   - [Verify Windows requirements before downloading](#verify-windows-requirements-before-downloading)
-  - [Download the Windows executables](#download-the-windows-executables)
+  - [Download the Windows executable](#download-the-windows-executable)
   - [Unblock a downloaded executable](#unblock-a-downloaded-executable)
   - [Create projects on Windows](#create-projects-on-windows)
 - [Using the generated project](#using-the-generated-project)
@@ -57,6 +59,66 @@ Bioinformatics Sandbox creates a language-neutral scientific project for mixed P
 R, notebooks, command-line tools, and containerized workloads. It provides the
 code/data layout, VS Code tooling, and either Codex or Claude Code.
 
+## Startup window and connection settings
+
+Open **VS Code Sandboxes** and choose the sandbox type at the top of the startup window.
+Python and R show their own version fields; general bioinformatics has no version
+field. Changing types updates the suggested folder while preserving an edited
+folder path. The last successful choice is remembered. Workspace settings, internet
+access, Codex endpoints, and live startup activity remain in this one window.
+Terminal is not opened. Windows uses Microsoft Edge in app mode (Edge must be installed);
+macOS uses a native WebKit window. Generated project apps/executables show the same
+internet and Codex connection choices every time you open a workspace.
+
+Choose **No internet**, **Selected sites**, or **Open** before starting. Selected
+sites accepts comma-separated hostnames, `*.example.org` or `**.example.org`
+subdomain patterns, and optional ports. Include your private endpoint and any
+package registries needed for setup. The restrictions apply to the sandbox;
+host Git clones, image builds/downloads, Docker authentication, and host VS Code
+installation still use the host connection. A first launch without package
+registry access can fail until its dependencies have been prepared.
+
+Docker's local default network preset is shared. If Selected sites needs a
+change from an existing open/balanced preset, the app lists current sandboxes
+and offers **Apply to all sandboxes** or **Cancel startup**. The confirmation
+explains that Docker's reset clears local custom rules and stops running
+sandboxes. Those sandboxes must be restarted afterwards. Cancelling leaves the
+shared policy unchanged. The app never resets the shared policy without this
+confirmation. A new Docker installation with no preset is initialized to the
+chosen mode. Existing organization policies can further restrict access.
+
+Each workspace starts behind a deny-all guard while connection settings and
+network rules are applied. Selected sites requires a deny-by-default preset;
+extra kit/global destinations are blocked for that workspace. If an existing
+broad rule cannot be narrowed safely, startup stops with the guard in place.
+This uses Docker's hostname-based enforcement and inherits its documented
+[hostname blocking limitations](https://docs.docker.com/ai/governance/local/network-rules/).
+
+For Codex, choose **Private endpoint** to import a `config.toml` or enter an
+OpenAI Responses-compatible URL, model ID, and optional API key. The app discovers
+an existing private configuration under `$CODEX_HOME/config.toml` or
+`~/.codex/config.toml`; saved launcher settings take priority. For a new endpoint,
+clear the existing TOML path and enter the fields. Imported provider settings
+preserve query parameters and custom headers. Host `env_key` and
+`env_http_headers` credentials are resolved from the app's environment; an API key
+entered in the form overrides `env_key`. Host authentication commands and gateway
+OAuth need a separate sandbox-compatible configuration and are rejected with
+instructions. Other host settings such as hooks and MCP commands are not imported.
+
+Reusable files are stored outside the repository:
+
+- macOS: `~/Library/Application Support/VS Code Sandboxes/`;
+- Windows: `%AppData%\VS Code Sandboxes\`.
+
+`endpoints/private.toml` contains the saved provider and any API key as a static
+bearer token, protected with user-only file permissions on macOS and inherited
+user-profile access on Windows. Keys are not stored in the UI preference JSON or
+project Git history. The connection is installed in the sandbox user's
+`~/.codex/config.toml`, where both Codex CLI and the Remote-SSH Codex extension
+can read it. Switching back to Default restores the sandbox's previous config.
+An endpoint on the host must use a hostname reachable from the sandbox;
+`localhost` inside the sandbox refers to the sandbox itself.
+
 ## macOS
 
 ### macOS requirements
@@ -72,7 +134,8 @@ Docker Sandboxes currently requires an Apple silicon Mac running macOS Sonoma
   and
 - access to the coding agent you intend to use: Codex or Claude Code.
 
-Sign in once with `sbx login`.
+The startup app runs `sbx login` automatically when Docker authentication is required.
+Complete the browser sign-in when prompted. You can also sign in ahead of time with `sbx login`.
 
 **Before opening Python Sandbox or R Sandbox, run `podman machine init` once,
 then `podman machine start`.** This applies on macOS and Windows. Bioinformatics
@@ -124,37 +187,16 @@ The final command must print `linux`. Bioinformatics Sandbox does not require
 these Podman checks. If either Git identity command prints nothing, configure
 the missing value before running a launcher.
 
-### Install the macOS applications
+### Install the macOS application
 
-#### Python Sandbox
+1. Download **VS-Code-Sandboxes.dmg** from the release assets (or use the
+   locally built [disk image](sandbox-launcher/assets/VS-Code-Sandboxes.dmg)).
+2. Open the disk image.
+3. Drag **VS Code Sandboxes** to **Applications**.
+4. Eject the disk image and open **VS Code Sandboxes**.
+5. Choose **Python**, **R**, or **General bioinformatics** in the startup window.
 
-1. Open the latest Python Sandbox release on the
-   [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
-   page.
-2. Under **Assets**, download `Python-Sandbox.dmg`.
-3. Double-click the downloaded DMG.
-4. Drag **Python Sandbox** onto the **Applications** shortcut.
-5. Eject the Python Sandbox disk image.
-
-#### R Sandbox
-
-1. Open the latest R Sandbox release on the
-   [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
-   page.
-2. Under **Assets**, download `R-Sandbox.dmg`.
-3. Double-click the downloaded DMG.
-4. Drag **R Sandbox** onto the **Applications** shortcut.
-5. Eject the R Sandbox disk image.
-
-#### Bioinformatics Sandbox
-
-1. Open the latest Bioinformatics Sandbox release on the
-   [GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
-   page.
-2. Under **Assets**, download `Bioinformatics-Sandbox.dmg`.
-3. Double-click the downloaded DMG.
-4. Drag **Bioinformatics Sandbox** onto the **Applications** shortcut.
-5. Eject the Bioinformatics Sandbox disk image.
+The app includes all three setup payloads; no separate language launcher is needed.
 
 ### Open an unsigned sandbox app
 
@@ -182,49 +224,19 @@ page under **Assets** and verify its checksum instead.
 
 ### Create projects on macOS
 
-#### Create a Python project on macOS
+1. Open **VS Code Sandboxes** from Applications.
+2. Choose **Python**, **R**, or **General bioinformatics**.
+3. For Python or R, choose a `major.minor` or `major.minor.patch` version.
+   The environment uses that major/minor series; R selects its latest Rocker patch.
+4. Choose the coding agent, project folder, sandbox internet access, and Codex
+   connection. The folder is created if needed.
+5. Select **Start sandbox** and follow progress in the same window. Complete
+   browser sign-in if Docker requests it.
+6. Wait for VS Code to open the workspace through Remote-SSH.
 
-1. Open **Python Sandbox** from Applications.
-2. Review the prefilled Python version, coding agent, and project folder in the
-   setup form, then choose **Setup**.
-3. Use a Python version in `major.minor` or `major.minor.patch` form, such as
-   `3.13` or `3.13.2`. The sandbox uses the corresponding major/minor series.
-4. The project folder is created if it does not exist.
-5. Keep the Terminal window open while the application prepares the repository,
-   builds the sandbox, configures SSH, installs the VS Code extensions, and
-   opens the project in Visual Studio Code.
-
-The initial build can take several minutes.
-
-#### Create an R project on macOS
-
-1. Open **R Sandbox** from Applications.
-2. Review the prefilled R version, coding agent, and project folder in the setup
-   form, then choose **Setup**.
-3. Use an R version in `major.minor` or `major.minor.patch` form, such as `4.5`
-   or `4.5.1`. The latest available Rocker patch for that major/minor series is
-   selected.
-4. The project folder is created if it does not exist.
-5. Keep the Terminal window open while the application prepares the repository,
-   builds the R environment, configures SSH, installs the VS Code extensions,
-   and opens the project.
-
-The initial R image build can take several minutes because it includes R package
-build tools and language-server dependencies.
-
-#### Create a bioinformatics project on macOS
-
-1. Open **Bioinformatics Sandbox** from Applications.
-2. Review the prefilled coding agent and project folder in the setup form, then
-   choose **Setup**.
-3. The project folder is created if it does not exist.
-4. Keep the Terminal window open while the application prepares the repository,
-   creates or reconnects to the sandbox, configures SSH, installs the scientific
-   VS Code extensions, and opens the project.
-
-Workload containers run using Podman installed inside the sandbox, without a host
-container socket. The launcher installs Podman on first connection and checks its
-root-owned VFS store on every connection.
+Initial image builds and dependency installation can take several minutes.
+Python and R need host Podman for image building. General bioinformatics does
+not require host Podman; workload containers use Podman inside the sandbox.
 
 ## Windows
 
@@ -240,7 +252,7 @@ Install these prerequisites first:
 - [Git for Windows](https://git-scm.com/download/win), including Git Bash;
 - the Windows OpenSSH Client optional feature;
 - [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/install/) 0.39.0 or
-  newer, then sign in with `sbx login`;
+  newer, then complete the browser sign-in when the startup app requests it;
 - [Visual Studio Code](https://code.visualstudio.com/) and access to Codex or
   Claude Code; and
 - for **Python Sandbox** and **R Sandbox** only, [Podman](https://podman.io/)
@@ -300,15 +312,11 @@ podman.exe info --format '{{.Host.OS}}'
 The final command must print `linux`. Bioinformatics Sandbox does not require
 these Podman checks.
 
-### Download the Windows executables
+### Download the Windows executable
 
-Open the appropriate release on the
-[GitHub Releases](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases)
-page. Under **Assets**, download the appropriate file:
-
-- `Python-Sandbox.exe`;
-- `R-Sandbox.exe`; or
-- `Bioinformatics-Sandbox.exe`.
+Download **VS-Code-Sandboxes.exe** from the release assets (or use the locally
+built [executable](sandbox-launcher/assets/VS-Code-Sandboxes.exe)). It contains
+all three sandbox types. Microsoft Edge must be installed for the startup window.
 
 ### Unblock a downloaded executable
 
@@ -328,53 +336,17 @@ If Windows blocks the downloaded executable:
 
 ### Create projects on Windows
 
-#### Create a Python project on Windows
+1. Double-click **VS-Code-Sandboxes.exe**.
+2. Choose **Python**, **R**, or **General bioinformatics**.
+3. Enter the Python or R version when that field is shown.
+4. Choose the agent and an absolute project folder on a local Windows drive.
+5. Choose sandbox internet access and the Codex connection, then select
+   **Start sandbox**.
+6. Follow the activity panel and complete any browser sign-in. Keep the app open
+   until VS Code opens the workspace or the app displays a recoverable error.
 
-1. Double-click `Python-Sandbox.exe`.
-2. Review the prefilled Python version, coding agent, and project folder in the
-   setup form, then choose **Setup**. **Browse** can select an existing project
-   folder; an edited path is created if it does not exist.
-3. Use a Python version in `major.minor` or `major.minor.patch` form, such as
-   `3.13` or `3.13.2`. The sandbox uses the corresponding major/minor series.
-4. The project folder is created if it does not exist.
-5. Keep the launcher window open while it prepares the repository, builds the sandbox,
-   configures SSH, installs the VS Code extensions, and opens the project in
-   Visual Studio Code.
-
-The initial build can take several minutes. Keep the launcher window open until
-it reports that setup finished or displays an error.
-
-#### Create an R project on Windows
-
-1. Double-click `R-Sandbox.exe`.
-2. Review the prefilled R version, coding agent, and project folder in the setup
-   form, then choose **Setup**. **Browse** can select an existing project folder;
-   an edited path is created if it does not exist.
-3. Use an R version in `major.minor` or `major.minor.patch` form, such as
-   `4.5` or `4.5.1`. The latest available Rocker patch for that major/minor
-   series is selected.
-4. The project folder is created if it does not exist.
-5. Keep the launcher window open while it prepares the repository, builds the R
-   environment, configures SSH, installs the VS Code extensions, and opens the
-   project.
-
-The initial R image build may take several minutes because it includes R package
-build tools and language-server dependencies.
-
-#### Create a bioinformatics project on Windows
-
-1. Double-click `Bioinformatics-Sandbox.exe`.
-2. Review the prefilled coding agent and project folder in the setup form, then
-   choose **Setup**. **Browse** can select an existing project folder; an edited
-   path is created if it does not exist.
-3. The project folder is created if it does not exist.
-4. Wait while the application prepares the repository, creates or reconnects to
-   the sandbox, configures SSH, installs the scientific VS Code extensions, and
-   opens the project.
-
-Workload containers run using Podman installed inside the sandbox, without a host
-container socket. The launcher installs Podman on first connection and checks its
-root-owned VFS store on every connection.
+Python and R require host Podman; general bioinformatics does not. The app checks
+only the dependencies needed by the selected sandbox type.
 
 ## Using the generated project
 
@@ -445,8 +417,8 @@ project's `code` folder and double-click the generated runner:
 The runner already contains the agent selected during setup. It reconnects to the
 existing sandbox when available and opens the project through VS Code Remote-SSH.
 
-On macOS, double-click the generated **Run Python Sandbox.app** for Python.
-For an existing R or bioinformatics project, reopen the installed sandbox app and
+On macOS, double-click the generated **Run Python Sandbox.app**, **Run R Sandbox.app**,
+or **Run Bioinformatics Sandbox.app**. You can also reopen the installed sandbox app and
 enter the same setup values and project directory.
 
 The command-line equivalents, run from the project root, are:

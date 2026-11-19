@@ -19,6 +19,6 @@ cd "$repository_root"
   --file-description "Bioinformatics Sandbox launcher" --product-name "Bioinformatics Sandbox" \
   --original-filename "Bioinformatics-Sandbox.exe" --icon "$icon_path"
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
-  -ldflags="-s -w" \
+  -ldflags="-s -w -H windowsgui" \
   -o "$output_path" "./bioinformatics-sandbox/windows"
 echo "$output_path"

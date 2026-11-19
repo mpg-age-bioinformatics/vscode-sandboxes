@@ -43,6 +43,12 @@ case "$1" in
  *) exit 1 ;;
 esac
 MOCK
+cat > "$test_root/bin/startup-helper" <<'MOCK'
+#!/usr/bin/env bash
+printf 'startup-helper %s\n' "$*" >> "$WORKFLOW_LOG"
+# Fail closed before any sandbox package installation or VS Code startup.
+exit 1
+MOCK
 chmod +x "$test_root/bin/"*
 for language in python r bioinformatics; do
   project="$test_root/$language"
@@ -68,6 +74,13 @@ for language in python r bioinformatics; do
   else
     ! grep -F 'podman ' "$WORKFLOW_LOG" >/dev/null
   fi
+  : > "$WORKFLOW_LOG"
+  if VSCODE_SANDBOX_STARTUP_HELPER="$test_root/bin/startup-helper" bash "$project/code/run-$language-sandbox.sh" codex >/dev/null 2>&1; then
+    echo 'Failed network setup was incorrectly accepted' >&2; exit 1
+  fi
+  grep -F -- '--deny-network **' "$WORKFLOW_LOG" >/dev/null
+  grep -F 'startup-helper --startup-apply' "$WORKFLOW_LOG" >/dev/null
+  ! grep -F 'sbx exec --user root' "$WORKFLOW_LOG" >/dev/null
   if FAIL_BOOTSTRAP=1 bash "$project/code/run-$language-sandbox.sh" codex >/dev/null 2>&1; then
     echo 'Failed sandbox Podman setup was incorrectly accepted' >&2; exit 1
   fi

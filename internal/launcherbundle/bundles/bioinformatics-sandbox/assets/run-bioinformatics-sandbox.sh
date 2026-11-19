@@ -80,10 +80,22 @@ echo "Sandbox: $sandbox_name"
 echo "VS Code Remote-SSH host: ${sandbox_name}.sbx"
 echo "Workspace: $project_root"
 
+startup_args=()
+if [[ -n "${VSCODE_SANDBOX_STARTUP_HELPER:-}" ]]; then
+  startup_args=(--deny-network '**')
+fi
 if native_exec sbx ls --quiet | grep -Fqx "$sandbox_name"; then
+  if [[ -n "${VSCODE_SANDBOX_STARTUP_HELPER:-}" ]]; then
+    native_exec sbx stop "$sandbox_name"
+    native_exec "$VSCODE_SANDBOX_STARTUP_HELPER" --startup-guard "$sandbox_name" "$agent"
+  fi
   native_exec sbx run --detached --name "$sandbox_name"
 else
-  native_exec sbx run --detached --name "$sandbox_name" "$agent" "$(host_path "$project_root")"
+  native_exec sbx run --detached ${startup_args[@]+"${startup_args[@]}"} --name "$sandbox_name" "$agent" "$(host_path "$project_root")"
+fi
+
+if [[ -n "${VSCODE_SANDBOX_STARTUP_HELPER:-}" ]]; then
+  native_exec "$VSCODE_SANDBOX_STARTUP_HELPER" --startup-apply "$sandbox_name" "$agent"
 fi
 
 # Workload containers use Podman inside the sandbox, never a host socket.

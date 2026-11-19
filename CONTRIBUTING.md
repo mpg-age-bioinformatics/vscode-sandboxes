@@ -1,8 +1,8 @@
 # Contributing
 
-This repository keeps each sandbox and its downloadable release files in a
-separate top-level directory. For example, the Python sandbox lives in
-`python-sandbox/`.
+The primary application lives in `sandbox-launcher/` and includes Python, R, and
+general bioinformatics in one startup UI. Per-language source directories remain
+as worker and compatibility-build inputs. Shared setup payloads live under `internal/`.
 
 ## Repository convention
 
@@ -119,7 +119,7 @@ bash -n \
 
 ### Windows executables
 
-Windows launchers are native x86-64 console applications built with Go. Install
+Windows launchers are native x86-64 GUI applications built with Go. Install
 the pinned resource tool once:
 
 ```bash
@@ -174,7 +174,7 @@ Then mount the DMG and verify that:
 - the Finder window contains the application and an `Applications` shortcut;
 - dragging the application into `Applications` succeeds;
 - the application starts by double-clicking it;
-- all interactive prompts work in a fresh Terminal session;
+- workspace settings, network confirmation, and live activity work in the startup window;
 - the selected sandbox is created and opens correctly; and
 - failure messages remain visible and explain how to recover.
 
@@ -183,41 +183,20 @@ different build command, document it in this file under its own heading.
 
 ## Publish with a GitHub Release
 
-Publish one combined release containing the macOS and Windows downloads for all
-three sandboxes, following the existing `v0.0.1` and `v1.0.0` releases. Use a
-repository-wide `v<version>` tag and the title `VS Code Sandboxes <version>`.
+Publish the unified application as one repository-wide `v<version>` release
+containing **VS-Code-Sandboxes.dmg** and **VS-Code-Sandboxes.exe**. These each
+include all three sandbox types. Per-language packages are compatibility builds.
 
-Update the macOS application versions (including the Python project-runner
-template) and the Windows product/file versions in all three build scripts.
-Rebuild and verify all six artifacts with `scripts/create-release.sh`, then
-commit the source, metadata, Windows resources, and finished artifacts together.
+Update the unified application version before publishing. Rebuild and verify
+both downloads with `./scripts/create-release.sh all macos` and
+`./scripts/create-release.sh all windows`, then commit the source, metadata, and
+artifacts together. Test Windows on a Windows host before publishing.
 
-After the release commit is on the default branch:
-
-```bash
-git tag -a v1.0.1 -m "VS Code Sandboxes 1.0.1"
-git push origin v1.0.1
-gh release create v1.0.1 \
-  python-sandbox/assets/Python-Sandbox.dmg \
-  python-sandbox/assets/Python-Sandbox.exe \
-  r-sandbox/assets/R-Sandbox.dmg \
-  r-sandbox/assets/R-Sandbox.exe \
-  bioinformatics-sandbox/assets/Bioinformatics-Sandbox.dmg \
-  bioinformatics-sandbox/assets/Bioinformatics-Sandbox.exe \
-  LICENSE THIRD-PARTY-NOTICES.txt \
-  --verify-tag --latest \
-  --title "VS Code Sandboxes 1.0.1" \
-  --notes-file /path/to/release-notes.md
-```
-
-Before publishing, confirm that the DMG and EXE files in `assets/` are the same
-builds that were tested. Give users the GitHub Release page—not a link to the
-`.app` directory in the source tree. macOS users install through the DMG; Windows
-users download the matching EXE directly.
-
-Use the next appropriate version in place of `1.0.1`. After publishing, verify
-that all six release downloads match the tested local files and that the release
-is marked as the latest stable version.
+After the release commit is on the default branch, create an annotated version
+tag and publish the two files under `sandbox-launcher/assets/` together with
+`LICENSE` and `THIRD-PARTY-NOTICES.txt`. Include the tested operating systems and
+checksums in the release notes. Verify that the uploaded downloads match the
+local artifacts and mark the release as the latest stable release.
 
 ## License and dependency notices
 
@@ -228,8 +207,8 @@ redistributing third-party components.
 
 macOS build scripts include both documents in the disk image and application.
 Windows launchers embed them and expose them with `--licenses`; generated Windows
-project runners retain the embedded documents. The generated macOS Python runner
-also carries the documents in its Resources directory.
+project runners retain the embedded documents. Generated macOS project runners
+also carry the documents in their Resources directories.
 
 When changing the Go toolchain, review its main license and component-specific
 notices (including runtime and math sources) and update the third-party notices.
@@ -250,3 +229,50 @@ Follow the PSF trademark policy separately from the MIT license, especially for
 commercial redistribution. Do not imply endorsement by upstream projects. Adding
 official R logo artwork requires its own license and attribution; the current
 letter-R artwork is not the official R-and-ellipse logo.
+
+
+## Desktop startup controller
+
+`internal/startui` contains the shared local startup window, authenticated
+loopback controller, Codex TOML import, and network policy orchestration.
+`internal/desktop/Window.swift` hosts the UI in a native macOS WebKit window.
+Windows runs the same UI in an isolated Edge app window and starts hidden worker
+processes using the existing Go launcher backend.
+
+Run `./scripts/build-desktop.sh` on macOS to rebuild helpers in the three source
+apps before opening them. DMG builders run this automatically. Generated helper
+binaries are ignored by Git and are not embedded recursively into setup bundles.
+The project setup copies the desktop helpers into generated macOS project apps.
+Windows release builds use `-H windowsgui` to avoid opening a console.
+
+Run `go test ./...`, `scripts/test-self-contained.sh`,
+`scripts/test-daemon-autostart.sh`, `scripts/test-podman-workflow.sh`, and
+`python3 scripts/test-apt-lock-retry.py`. Startup policy tests use a simulated
+`sbx` and temporary user configuration directories, without changing live Docker
+policies. Also compile Windows launchers and visually inspect the macOS window.
+Test real network access, browser authentication, and Windows UI on their target
+hosts before publishing releases.
+
+The TOML parser is `github.com/pelletier/go-toml/v2` (MIT); its notice is included
+in `THIRD-PARTY-NOTICES.txt`.
+
+
+## Unified application releases
+
+Use `./scripts/create-release.sh all macos` and
+`./scripts/create-release.sh all windows` to update
+`sandbox-launcher/assets/VS-Code-Sandboxes.dmg` and
+`sandbox-launcher/assets/VS-Code-Sandboxes.exe`. These two files are the primary
+user downloads. Existing per-language build targets remain compatibility builds.
+
+The shared catalog in `internal/startui/catalog.go` drives the type selector and
+platform dispatchers. Python/R request a language version and host Podman;
+general bioinformatics requests neither. Fixed project runners resolve their
+sandbox from their own configuration or filename and cannot switch an existing
+workspace's type. The unified macOS package stages all worker commands, icons,
+and self-contained setup bundles under `Resources/Launchers/`; these generated
+payloads are ignored by Git and recreated by `scripts/build-desktop.sh`.
+
+Build macOS packages with Go and Xcode command-line tools (`swiftc`), and inspect
+all selector choices before publishing. Windows packages can be cross-compiled;
+exercise the Edge app window on Windows before publishing.

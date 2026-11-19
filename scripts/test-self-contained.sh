@@ -18,6 +18,10 @@ for argument in "$@"; do
     exit 0
   fi
 done
+if [[ " $* " == *" remote get-url origin "* ]]; then
+  printf 'https://github.com/mpg-age-bioinformatics/skills.git\n'
+  exit 0
+fi
 if [[ " $* " == *" rev-parse --git-path hooks "* ]]; then
   printf '.git/hooks\n'
   exit 0
@@ -102,6 +106,28 @@ run_case() {
   (cd "$project" && .git/hooks/pre-commit)
   [[ -f "$project/data/demo.csv" ]]
   cmp "$runner_source" "$project/code/$runner_name"
+  # All flavors must also install a self-contained macOS project window.
+  local app_name icon_name
+  case "$slug" in
+    python-sandbox) app_name="Python Sandbox"; icon_name=PythonSandbox ;;
+    r-sandbox) app_name="R Sandbox"; icon_name=RSandbox ;;
+    bioinformatics-sandbox) app_name="Bioinformatics Sandbox"; icon_name=BioinformaticsSandbox ;;
+  esac
+  local desktop_resources="$test_root/desktop-resources"
+  mkdir -p "$desktop_resources"
+  printf 'desktop controller fixture\n' > "$desktop_resources/Sandbox Desktop"
+  printf 'native window fixture\n' > "$desktop_resources/Sandbox Window"
+  env PATH="$mock_bin:$PATH" \
+    VSCODE_SANDBOX_PROJECT_APP_TEMPLATE="$bundle/assets/Run $app_name.app.template" \
+    VSCODE_SANDBOX_PROJECT_APP_ICON="$repository_root/$slug/assets/$app_name.app/Contents/Resources/$icon_name.icns" \
+    VSCODE_SANDBOX_DESKTOP_RESOURCES="$desktop_resources" \
+    "$bundle/scripts/setup-project.sh" "${args[@]}" >/dev/null
+  local installed_app="$project/code/Run $app_name.app"
+  cmp "$desktop_resources/Sandbox Desktop" "$installed_app/Contents/Resources/Sandbox Desktop"
+  cmp "$desktop_resources/Sandbox Window" "$installed_app/Contents/Resources/Sandbox Window"
+  [[ -x "$installed_app/Contents/MacOS/run-$slug" ]]
+  [[ "$(< "$project/code/.$slug-agent")" == "$agent" ]]
+  ! grep -F 'open -a Terminal' "$installed_app/Contents/MacOS/run-$slug"
   [[ -z "$(find "$project" -path "$project/skills" -prune -o -name EMPTY_SKILLS_CLONE -print)" ]]
 }
 

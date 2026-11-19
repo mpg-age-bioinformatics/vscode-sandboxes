@@ -89,15 +89,19 @@ if [[ -n "$project_runner_source" ]]; then
   setup_paths+=("code/Run Python Sandbox.exe" code/.python-sandbox-agent)
 fi
 if [[ -n "$project_app_template" ]]; then
+  install_if_absent_or_identical "$generated_agent" code/.python-sandbox-agent
+  setup_paths+=(code/.python-sandbox-agent)
   [[ -d "$project_app_template" && -f "$project_app_icon" ]] || { echo "Error: bundled macOS project launcher is incomplete." >&2; exit 1; }
   mkdir -p "code/Run Python Sandbox.app/Contents/MacOS" "code/Run Python Sandbox.app/Contents/Resources"
   install_if_absent_or_identical "$project_app_template/Contents/Info.plist" "code/Run Python Sandbox.app/Contents/Info.plist"
   install_if_absent_or_identical "$project_app_template/Contents/MacOS/run-python-sandbox" "code/Run Python Sandbox.app/Contents/MacOS/run-python-sandbox"
   install_if_absent_or_identical "$project_app_icon" "code/Run Python Sandbox.app/Contents/Resources/PythonSandbox.icns"
   for notice in LICENSE THIRD-PARTY-NOTICES.txt; do
-    if [[ -f "$project_app_template/Contents/Resources/$notice" ]]; then
-      install_if_absent_or_identical "$project_app_template/Contents/Resources/$notice" "code/Run Python Sandbox.app/Contents/Resources/$notice"
-    fi
+    install_if_absent_or_identical "$notice_root/$notice" "code/Run Python Sandbox.app/Contents/Resources/$notice"
+  done
+  for binary in "Sandbox Desktop" "Sandbox Window"; do
+    install_if_absent_or_identical "${VSCODE_SANDBOX_DESKTOP_RESOURCES:-$project_app_template/Contents/Resources}/$binary" "code/Run Python Sandbox.app/Contents/Resources/$binary"
+    chmod 755 "code/Run Python Sandbox.app/Contents/Resources/$binary"
   done
   chmod 755 "code/Run Python Sandbox.app/Contents/MacOS/run-python-sandbox"
   setup_paths+=("code/Run Python Sandbox.app")

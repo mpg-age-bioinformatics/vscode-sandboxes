@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="/opt/homebrew/bin:/usr/local/bin:/opt/podman/bin:$PATH"
+resources="$(CDPATH= cd -- "$(dirname -- "$0")/../Resources" && pwd)"
+exec "$resources/Sandbox Desktop" --unified

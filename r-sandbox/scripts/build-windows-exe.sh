@@ -19,6 +19,6 @@ cd "$repository_root"
   --file-description "R Sandbox launcher" --product-name "R Sandbox" \
   --original-filename "R-Sandbox.exe" --icon "$icon_path"
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
-  -ldflags="-s -w" \
+  -ldflags="-s -w -H windowsgui" \
   -o "$output_path" "./r-sandbox/windows"
 echo "$output_path"

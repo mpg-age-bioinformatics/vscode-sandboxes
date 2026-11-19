@@ -8,6 +8,8 @@ skill_dir="$(dirname -- "$script_dir")"
 skills_repository="${BIOINFORMATICS_SANDBOX_SKILLS_REPOSITORY:-https://github.com/mpg-age-bioinformatics/skills.git}"
 project_runner_source="${VSCODE_SANDBOX_PROJECT_RUNNER_SOURCE:-}"
 project_runner_agent="${VSCODE_SANDBOX_PROJECT_RUNNER_AGENT:-}"
+project_app_template="${VSCODE_SANDBOX_PROJECT_APP_TEMPLATE:-}"
+project_app_icon="${VSCODE_SANDBOX_PROJECT_APP_ICON:-}"
 
 if [[ -z "$target_dir" || "$target_dir" != /* || ! -d "$target_dir" ]]; then
   echo "Usage: setup-project.sh <absolute-existing-project-directory> <codex|claude>" >&2
@@ -82,6 +84,25 @@ if [[ -n "$project_runner_source" ]]; then
   install_if_absent_or_identical "$project_runner_source" "code/Run Bioinformatics Sandbox.exe"
   install_if_absent_or_identical "$generated_agent" code/.bioinformatics-sandbox-agent
   setup_paths+=("code/Run Bioinformatics Sandbox.exe" code/.bioinformatics-sandbox-agent)
+fi
+
+if [[ -n "$project_app_template" ]]; then
+  install_if_absent_or_identical "$generated_agent" code/.bioinformatics-sandbox-agent
+  setup_paths+=(code/.bioinformatics-sandbox-agent)
+  [[ -d "$project_app_template" && -f "$project_app_icon" ]] || { echo "Error: bundled macOS project launcher is incomplete." >&2; exit 1; }
+  mkdir -p "code/Run Bioinformatics Sandbox.app/Contents/MacOS" "code/Run Bioinformatics Sandbox.app/Contents/Resources"
+  install_if_absent_or_identical "$project_app_template/Contents/Info.plist" "code/Run Bioinformatics Sandbox.app/Contents/Info.plist"
+  install_if_absent_or_identical "$project_app_template/Contents/MacOS/run-bioinformatics-sandbox" "code/Run Bioinformatics Sandbox.app/Contents/MacOS/run-bioinformatics-sandbox"
+  install_if_absent_or_identical "$project_app_icon" "code/Run Bioinformatics Sandbox.app/Contents/Resources/BioinformaticsSandbox.icns"
+  for notice in LICENSE THIRD-PARTY-NOTICES.txt; do
+    install_if_absent_or_identical "$notice_root/$notice" "code/Run Bioinformatics Sandbox.app/Contents/Resources/$notice"
+  done
+  for binary in "Sandbox Desktop" "Sandbox Window"; do
+    install_if_absent_or_identical "${VSCODE_SANDBOX_DESKTOP_RESOURCES:-$project_app_template/Contents/Resources}/$binary" "code/Run Bioinformatics Sandbox.app/Contents/Resources/$binary"
+    chmod 755 "code/Run Bioinformatics Sandbox.app/Contents/Resources/$binary"
+  done
+  chmod 755 "code/Run Bioinformatics Sandbox.app/Contents/MacOS/run-bioinformatics-sandbox"
+  setup_paths+=("code/Run Bioinformatics Sandbox.app")
 fi
 
 if [[ ! -e .gitignore ]]; then

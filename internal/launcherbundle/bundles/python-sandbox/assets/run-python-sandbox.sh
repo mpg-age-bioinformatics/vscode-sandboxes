@@ -104,14 +104,26 @@ echo "Sandbox: $sandbox_name"
 echo "VS Code Remote-SSH host: ${sandbox_name}.sbx"
 echo "Workspace: $project_root"
 
+startup_args=()
+if [[ -n "${VSCODE_SANDBOX_STARTUP_HELPER:-}" ]]; then
+  startup_args=(--deny-network '**')
+fi
 if native_exec sbx ls --quiet | grep -Fqx "$sandbox_name"; then
+  if [[ -n "${VSCODE_SANDBOX_STARTUP_HELPER:-}" ]]; then
+    native_exec sbx stop "$sandbox_name"
+    native_exec "$VSCODE_SANDBOX_STARTUP_HELPER" --startup-guard "$sandbox_name" "$agent"
+  fi
   native_exec sbx run --detached --name "$sandbox_name"
 else
-  native_exec sbx run --detached --pull never --name "$sandbox_name" --template "$template_tag" "$agent" "$(host_path "$project_root")"
+  native_exec sbx run --detached ${startup_args[@]+"${startup_args[@]}"} --pull never --name "$sandbox_name" --template "$template_tag" "$agent" "$(host_path "$project_root")"
 fi
 
 python_series="$(sed -n 's/^ARG PYTHON_IMAGE=docker.io\/library\/python:\([0-9][0-9]*\.[0-9][0-9]*\)-bookworm$/\1/p' "$project_root/code/Dockerfile")"
 [[ -n "$python_series" ]] || { echo "Error: could not determine the Python series from code/Dockerfile." >&2; exit 1; }
+if [[ -n "${VSCODE_SANDBOX_STARTUP_HELPER:-}" ]]; then
+  native_exec "$VSCODE_SANDBOX_STARTUP_HELPER" --startup-apply "$sandbox_name" "$agent"
+fi
+
 # Workload containers use Podman inside the sandbox, never a host socket.
 native_exec sbx exec --user root "$sandbox_name" sh -ec '
   if ! command -v podman >/dev/null 2>&1; then

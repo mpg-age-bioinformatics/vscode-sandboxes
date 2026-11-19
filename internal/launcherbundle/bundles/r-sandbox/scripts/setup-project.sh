@@ -9,6 +9,8 @@ skill_dir="$(dirname -- "$script_dir")"
 skills_repository="${R_SANDBOX_SKILLS_REPOSITORY:-https://github.com/mpg-age-bioinformatics/skills.git}"
 project_runner_source="${VSCODE_SANDBOX_PROJECT_RUNNER_SOURCE:-}"
 project_runner_agent="${VSCODE_SANDBOX_PROJECT_RUNNER_AGENT:-}"
+project_app_template="${VSCODE_SANDBOX_PROJECT_APP_TEMPLATE:-}"
+project_app_icon="${VSCODE_SANDBOX_PROJECT_APP_ICON:-}"
 
 if [[ -z "$target_dir" || -z "$r_version" || -z "$agent" ]]; then
   echo "Usage: setup-project.sh <absolute-project-directory> <R-version> <codex|claude>" >&2
@@ -71,6 +73,24 @@ if [[ -n "$project_runner_source" ]]; then
   install_if_absent_or_identical "$project_runner_source" "code/Run R Sandbox.exe"
   install_if_absent_or_identical "$generated_agent" code/.r-sandbox-agent
   setup_paths+=("code/Run R Sandbox.exe" code/.r-sandbox-agent)
+fi
+if [[ -n "$project_app_template" ]]; then
+  install_if_absent_or_identical "$generated_agent" code/.r-sandbox-agent
+  setup_paths+=(code/.r-sandbox-agent)
+  [[ -d "$project_app_template" && -f "$project_app_icon" ]] || { echo "Error: bundled macOS project launcher is incomplete." >&2; exit 1; }
+  mkdir -p "code/Run R Sandbox.app/Contents/MacOS" "code/Run R Sandbox.app/Contents/Resources"
+  install_if_absent_or_identical "$project_app_template/Contents/Info.plist" "code/Run R Sandbox.app/Contents/Info.plist"
+  install_if_absent_or_identical "$project_app_template/Contents/MacOS/run-r-sandbox" "code/Run R Sandbox.app/Contents/MacOS/run-r-sandbox"
+  install_if_absent_or_identical "$project_app_icon" "code/Run R Sandbox.app/Contents/Resources/RSandbox.icns"
+  for notice in LICENSE THIRD-PARTY-NOTICES.txt; do
+    install_if_absent_or_identical "$notice_root/$notice" "code/Run R Sandbox.app/Contents/Resources/$notice"
+  done
+  for binary in "Sandbox Desktop" "Sandbox Window"; do
+    install_if_absent_or_identical "${VSCODE_SANDBOX_DESKTOP_RESOURCES:-$project_app_template/Contents/Resources}/$binary" "code/Run R Sandbox.app/Contents/Resources/$binary"
+    chmod 755 "code/Run R Sandbox.app/Contents/Resources/$binary"
+  done
+  chmod 755 "code/Run R Sandbox.app/Contents/MacOS/run-r-sandbox"
+  setup_paths+=("code/Run R Sandbox.app")
 fi
 install_if_absent_or_identical "$skill_dir/assets/settings.json" .vscode/settings.json
 install_if_absent_or_identical "$skill_dir/assets/extensions.json" .vscode/extensions.json

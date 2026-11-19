@@ -124,6 +124,7 @@ if [[ -n "$project_dir" ]]; then
 fi
 
 setup_script="$setup_dir/scripts/setup-project.sh"
+export VSCODE_SANDBOX_DESKTOP_RESOURCES="$asset_dir"
 export VSCODE_SANDBOX_PROJECT_APP_TEMPLATE="$setup_dir/assets/Run Python Sandbox.app.template"
 export VSCODE_SANDBOX_PROJECT_APP_ICON="$asset_dir/PythonSandbox.icns"
 "$setup_script" "$project_dir" "$python_version" "$agent" || exit 1

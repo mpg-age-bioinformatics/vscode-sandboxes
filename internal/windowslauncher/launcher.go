@@ -1,10 +1,11 @@
 package windowslauncher
 
 import (
-	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,11 +16,11 @@ import (
 
 	licensing "github.com/mpg-age-bioinformatics/vscode-sandboxes"
 	"github.com/mpg-age-bioinformatics/vscode-sandboxes/internal/launcherbundle"
+	"github.com/mpg-age-bioinformatics/vscode-sandboxes/internal/startui"
 )
 
-var reader = bufio.NewReader(os.Stdin)
-
 type Config struct {
+	Unified        bool
 	AppName        string
 	SandboxSlug    string
 	ProjectRunner  string
@@ -45,42 +46,83 @@ func Main(config Config) {
 		fmt.Print(licensing.License, "\n", licensing.ThirdPartyNotices)
 		return
 	}
-	fmt.Println(config.AppName)
-	fmt.Println(strings.Repeat("=", len(config.AppName)))
-	fmt.Println()
-
-	projectMode := invokedAsProjectRunner(config, executablePath())
-	var err error
-	if projectMode {
-		err = runProject(config)
-	} else {
-		err = execute(config)
+	if startui.HandleHelper() {
+		return
 	}
-	fmt.Println()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Setup stopped:", err)
-	} else if projectMode {
-		fmt.Println(config.AppName, "opened successfully.")
-	} else {
-		fmt.Println(config.AppName, "finished successfully.")
+	// A unified executable is also copied to flavor-specific project-runner
+	// names. Resolve those before dispatching either the UI or its worker.
+	if config.Unified {
+		for _, item := range startui.Catalog() {
+			variant, _ := configForSandbox(item.Slug)
+			if invokedAsProjectRunner(variant, executablePath()) {
+				config = variant
+				break
+			}
+		}
 	}
-	fmt.Print("Press Enter to close this window...")
-	_, _ = reader.ReadString('\n')
+	if len(os.Args) == 2 && os.Args[1] == "--startup-worker" {
+		var selected startui.Selection
+		data, err := os.ReadFile(os.Getenv("VSCODE_SANDBOX_STARTUP_SELECTION"))
+		if err == nil {
+			err = json.Unmarshal(data, &selected)
+		}
+		if err == nil && config.Unified {
+			config, err = configForSandbox(selected.Sandbox)
+		}
+		if err == nil {
+			if invokedAsProjectRunner(config, executablePath()) {
+				err = runProject(config)
+			} else {
+				var deps dependencies
+				deps, err = checkDependencies(config.NeedsPodman)
+				if err == nil {
+					err = run(config, deps, setupSelection{selected.Version, selected.Agent, selected.Project})
+				}
+				if err == nil {
+					var launcher string
+					launcher, err = cygpath(deps.bash, filepath.Join(selected.Project, "code", config.ShellLauncher))
+					if err == nil {
+						err = runVisible(deps.bash, launcher, selected.Agent)
+					}
+				}
+			}
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	home, _ := os.UserHomeDir()
+	c := startui.Config{Name: config.AppName, Slug: config.SandboxSlug, Version: config.DefaultVersion, VersionLabel: config.VersionPrompt, Agent: "codex", Project: filepath.Join(home, "Desktop", config.SandboxSlug+"-project")}
+	if !config.NeedsVersion {
+		c.VersionLabel = ""
+	}
+	if config.Unified {
+		c = startui.Config{Name: "VS Code Sandboxes", Slug: "sandboxes", Version: "3.13", VersionLabel: "Python version", Agent: "codex", Project: filepath.Join(home, "Desktop", "python-sandbox-project"), Sandboxes: startui.Catalog()}
+	}
+	if invokedAsProjectRunner(config, executablePath()) {
+		c.ProjectMode = true
+		c.Project = filepath.Dir(filepath.Dir(executablePath()))
+		agent, _ := os.ReadFile(filepath.Join(c.Project, "code", "."+config.SandboxSlug+"-agent"))
+		c.Agent = strings.TrimSpace(string(agent))
+	}
+	err := startui.Run(c, func(selected startui.Selection, log io.Writer) error {
+		env, cleanup, err := startui.PrepareEnvironment(selected)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		cmd := startui.Command(executablePath(), "--startup-worker")
+		cmd.Env = append(os.Environ(), env...)
+		cmd.Stdout = log
+		cmd.Stderr = log
+		return cmd.Run()
+	})
 	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-}
-
-func execute(config Config) error {
-	deps, err := checkDependencies(config.NeedsPodman)
-	if err != nil {
-		return err
-	}
-	selection, cancelled, err := showSetupForm(config)
-	if cancelled || err != nil {
-		return err
-	}
-	return run(config, deps, selection)
 }
 
 func checkDependencies(needsPodman bool) (dependencies, error) {
@@ -308,7 +350,7 @@ func runProject(config Config) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(bash, unixLauncher, agent)
+	cmd := startui.Command(bash, unixLauncher, agent)
 	cmd.Dir = filepath.Dir(codeDir)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -319,134 +361,9 @@ func runProject(config Config) error {
 	return nil
 }
 
-func showSetupForm(config Config) (setupSelection, bool, error) {
-	resultDir, err := os.MkdirTemp("", config.SandboxSlug+"-selection-*")
-	if err != nil {
-		return setupSelection{}, false, err
-	}
-	defer os.RemoveAll(resultDir)
-	resultPath := filepath.Join(resultDir, "selection.txt")
-	cmd := exec.Command("powershell.exe", "-NoProfile", "-STA", "-Command", windowsFormScript)
-	cmd.Env = append(os.Environ(),
-		"VSCODE_SANDBOX_APP_NAME="+config.AppName,
-		"VSCODE_SANDBOX_VERSION_LABEL="+config.VersionPrompt,
-		"VSCODE_SANDBOX_DEFAULT_VERSION="+config.DefaultVersion,
-		"VSCODE_SANDBOX_DEFAULT_PROJECT_NAME="+config.SandboxSlug+"-project",
-		"VSCODE_SANDBOX_NEEDS_VERSION="+strconv.FormatBool(config.NeedsVersion),
-		"VSCODE_SANDBOX_RESULT_PATH="+resultPath)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return setupSelection{}, false, fmt.Errorf("open setup form: %s", strings.TrimSpace(string(output)))
-	}
-	data, err := os.ReadFile(resultPath)
-	if os.IsNotExist(err) {
-		return setupSelection{}, true, nil
-	}
-	if err != nil {
-		return setupSelection{}, false, fmt.Errorf("read setup form values: %w", err)
-	}
-	values := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
-	if len(values) < 3 {
-		return setupSelection{}, false, errors.New("the setup form returned incomplete values")
-	}
-	return setupSelection{strings.TrimSpace(values[0]), strings.TrimSpace(values[1]), strings.TrimSpace(values[2])}, false, nil
-}
-
-const windowsFormScript = `
-$appName = $env:VSCODE_SANDBOX_APP_NAME
-$versionLabelText = $env:VSCODE_SANDBOX_VERSION_LABEL
-$defaultVersion = $env:VSCODE_SANDBOX_DEFAULT_VERSION
-$defaultProjectName = $env:VSCODE_SANDBOX_DEFAULT_PROJECT_NAME
-$needsVersion = $env:VSCODE_SANDBOX_NEEDS_VERSION -eq 'true'
-$resultPath = $env:VSCODE_SANDBOX_RESULT_PATH
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-$desktop = [Environment]::GetFolderPath('Desktop')
-if ([String]::IsNullOrWhiteSpace($desktop)) { $desktop = $env:USERPROFILE }
-$defaultProject = Join-Path $desktop $defaultProjectName
-$form = New-Object Windows.Forms.Form
-$form.Text = $appName
-$form.StartPosition = 'CenterScreen'
-$form.FormBorderStyle = 'FixedDialog'
-$form.MaximizeBox = $false
-$form.MinimizeBox = $false
-$form.ClientSize = New-Object Drawing.Size(680, $(if ($needsVersion) { 205 } else { 167 }))
-$top = 20
-function Add-Label($text, $y) {
-  $label = New-Object Windows.Forms.Label
-  $label.Text = $text
-  $label.Location = New-Object Drawing.Point(18, $y)
-  $label.Size = New-Object Drawing.Size(130, 23)
-  $form.Controls.Add($label)
-}
-if ($needsVersion) {
-  Add-Label $versionLabelText $top
-  $version = New-Object Windows.Forms.TextBox
-  $version.Text = $defaultVersion
-  $version.Location = New-Object Drawing.Point(155, $top)
-  $version.Size = New-Object Drawing.Size(505, 23)
-  $form.Controls.Add($version)
-  $top += 38
-}
-Add-Label 'Agent' $top
-$agent = New-Object Windows.Forms.ComboBox
-$agent.DropDownStyle = 'DropDownList'
-[void]$agent.Items.AddRange(@('codex', 'claude'))
-$agent.SelectedIndex = 0
-$agent.Location = New-Object Drawing.Point(155, $top)
-$agent.Size = New-Object Drawing.Size(505, 23)
-$form.Controls.Add($agent)
-$top += 38
-Add-Label 'Project folder' $top
-$project = New-Object Windows.Forms.TextBox
-$project.Text = $defaultProject
-$project.Location = New-Object Drawing.Point(155, $top)
-$project.Size = New-Object Drawing.Size(415, 23)
-$form.Controls.Add($project)
-$browse = New-Object Windows.Forms.Button
-$browse.Text = 'Browse...'
-$browse.Location = New-Object Drawing.Point(580, ($top - 1))
-$browse.Size = New-Object Drawing.Size(80, 25)
-$browse.Add_Click({
-  $picker = New-Object Windows.Forms.FolderBrowserDialog
-  if (Test-Path -LiteralPath $project.Text -PathType Container) { $picker.SelectedPath = $project.Text }
-  if ($picker.ShowDialog() -eq 'OK') { $project.Text = $picker.SelectedPath }
-})
-$form.Controls.Add($browse)
-$top += 42
-$setup = New-Object Windows.Forms.Button
-$setup.Text = 'Setup'
-$setup.Location = New-Object Drawing.Point(495, $top)
-$setup.Size = New-Object Drawing.Size(80, 28)
-$setup.Add_Click({
-  $selectedVersion = if ($needsVersion) { $version.Text.Trim() } else { '' }
-  $selectedProject = $project.Text.Trim()
-  if (($needsVersion -and $selectedVersion -notmatch '^[0-9]+\.[0-9]+(\.[0-9]+)?$') -or [String]::IsNullOrWhiteSpace($selectedProject)) {
-    [void][Windows.Forms.MessageBox]::Show('Enter a valid version and project folder.', $appName, 'OK', 'Error')
-    return
-  }
-  if ($selectedProject -notmatch '^[A-Za-z]:[\\/]' -or $selectedProject.StartsWith('\\')) {
-    [void][Windows.Forms.MessageBox]::Show('Choose an absolute folder on a local Windows drive.', $appName, 'OK', 'Error')
-    return
-  }
-  [IO.File]::WriteAllLines($resultPath, @($selectedVersion, $agent.SelectedItem.ToString(), $selectedProject), (New-Object Text.UTF8Encoding($false)))
-  $form.DialogResult = 'OK'
-  $form.Close()
-})
-$cancel = New-Object Windows.Forms.Button
-$cancel.Text = 'Cancel'
-$cancel.Location = New-Object Drawing.Point(580, $top)
-$cancel.Size = New-Object Drawing.Size(80, 28)
-$cancel.DialogResult = 'Cancel'
-$form.AcceptButton = $setup
-$form.CancelButton = $cancel
-$form.Controls.Add($setup)
-$form.Controls.Add($cancel)
-[void]$form.ShowDialog()
-`
-
 func checkWindows11() error {
 	script := "Write-Output ((Get-CimInstance Win32_OperatingSystem).ProductType); Write-Output ([Environment]::OSVersion.Version.Build)"
-	out, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).CombinedOutput()
+	out, err := startui.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("cannot determine the Windows edition and build: %w", err)
 	}
@@ -469,7 +386,7 @@ func checkWindows11() error {
 }
 
 func checkSBXVersion(sbx string) error {
-	out, err := exec.Command(sbx, "version").CombinedOutput()
+	out, err := startui.Command(sbx, "version").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("cannot run 'sbx version': %w", err)
 	}
@@ -509,7 +426,7 @@ func findGitBash() (string, error) {
 }
 
 func isGitBash(path string) bool {
-	out, err := exec.Command(path, "-lc", `printf '%s' "$(uname -s)"; command -v cygpath >/dev/null`).CombinedOutput()
+	out, err := startui.Command(path, "-lc", `printf '%s' "$(uname -s)"; command -v cygpath >/dev/null`).CombinedOutput()
 	return err == nil && strings.HasPrefix(strings.ToUpper(strings.TrimSpace(string(out))), "MINGW")
 }
 
@@ -530,7 +447,7 @@ func addVSCodeToPath() error {
 }
 
 func cygpath(bash, path string) (string, error) {
-	cmd := exec.Command(bash, "-lc", `cygpath -u "$1"`, "launcher", path)
+	cmd := startui.Command(bash, "-lc", `cygpath -u "$1"`, "launcher", path)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr
@@ -549,7 +466,7 @@ func requireCommand(name, help string) (string, error) {
 }
 
 func checkPodmanConnection(podman string) error {
-	output, err := exec.Command(podman, "info", "--format", "{{.Host.OS}}").CombinedOutput()
+	output, err := startui.Command(podman, "info", "--format", "{{.Host.OS}}").CombinedOutput()
 	if err != nil {
 		detail := strings.TrimSpace(string(output))
 		if detail == "" {
@@ -573,7 +490,7 @@ func runVisible(name string, args ...string) error {
 }
 
 func runVisibleEnv(name string, extraEnv []string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	cmd := startui.Command(name, args...)
 	cmd.Env = append(os.Environ(), extraEnv...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

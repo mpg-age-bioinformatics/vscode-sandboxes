@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-code_dir="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)"
-launcher="$code_dir/run-python-sandbox.command"
-[[ -x "$launcher" ]] || {
-  osascript -e 'display alert "Run Python Sandbox" message "code/run-python-sandbox.command is missing." as critical'
-  exit 1
-}
-
-open -a Terminal "$launcher"
+export PATH="/opt/homebrew/bin:/usr/local/bin:/opt/podman/bin:$PATH"
+resources="$(CDPATH= cd -- "$(dirname -- "$0")/../Resources" && pwd)"
+code_dir="$(CDPATH= cd -- "$resources/../../.." && pwd)"
+agent="$(cat "$code_dir/.python-sandbox-agent")"
+exec "$resources/Sandbox Desktop" "Python Sandbox" "python-sandbox" "" "" "$code_dir/run-python-sandbox.sh" "$(dirname -- "$code_dir")" "$agent"

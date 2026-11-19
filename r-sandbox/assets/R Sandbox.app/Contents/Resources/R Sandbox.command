@@ -103,6 +103,9 @@ if ! podman info >/dev/null 2>&1; then
 fi
 
 setup_script="$setup_dir/scripts/setup-project.sh"
+export VSCODE_SANDBOX_DESKTOP_RESOURCES="$asset_dir"
+export VSCODE_SANDBOX_PROJECT_APP_TEMPLATE="$setup_dir/assets/Run R Sandbox.app.template"
+export VSCODE_SANDBOX_PROJECT_APP_ICON="$asset_dir/RSandbox.icns"
 
 if [[ -z "$r_version" ]]; then
   read -r -p "R version (major.minor or major.minor.patch): " r_version

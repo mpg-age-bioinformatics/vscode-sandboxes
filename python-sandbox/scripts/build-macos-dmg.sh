@@ -27,6 +27,8 @@ trap cleanup EXIT
 [[ "$output_path" == /* ]] || output_path="$(pwd -P)/$output_path"
 [[ ! -e "$output_path" ]] || { echo "Error: refusing to overwrite existing output: $output_path" >&2; exit 1; }
 
+"$repository_root/scripts/build-desktop.sh"
+
 staging_dir="$build_root/staging"
 read_write_dmg="$build_root/Python-Sandbox-rw.dmg"
 mkdir -p "$staging_dir"

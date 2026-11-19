@@ -96,14 +96,26 @@ echo "Workspace: $project_root"
 # host path can differ from the actual mount path on Windows.
 r_library=".r-library"
 
+startup_args=()
+if [[ -n "${VSCODE_SANDBOX_STARTUP_HELPER:-}" ]]; then
+  startup_args=(--deny-network '**')
+fi
 if native_exec sbx ls --quiet | grep -Fqx "$sandbox_name"; then
+  if [[ -n "${VSCODE_SANDBOX_STARTUP_HELPER:-}" ]]; then
+    native_exec sbx stop "$sandbox_name"
+    native_exec "$VSCODE_SANDBOX_STARTUP_HELPER" --startup-guard "$sandbox_name" "$agent"
+  fi
   native_exec sbx run --detached --env "R_LIBS_USER=$r_library" --name "$sandbox_name"
 else
-  native_exec sbx run --detached --pull never --env "R_LIBS_USER=$r_library" --name "$sandbox_name" --template "$template_tag" "$agent" "$(host_path "$project_root")"
+  native_exec sbx run --detached ${startup_args[@]+"${startup_args[@]}"} --pull never --env "R_LIBS_USER=$r_library" --name "$sandbox_name" --template "$template_tag" "$agent" "$(host_path "$project_root")"
 fi
 
 r_series="$(sed -n 's/^ARG R_IMAGE=ghcr.io\/rocker-org\/devcontainer\/r-ver:\([0-9][0-9]*\.[0-9][0-9]*\)$/\1/p' "$project_root/code/Dockerfile")"
 [[ -n "$r_series" ]] || { echo "Error: could not determine the R series from code/Dockerfile." >&2; exit 1; }
+if [[ -n "${VSCODE_SANDBOX_STARTUP_HELPER:-}" ]]; then
+  native_exec "$VSCODE_SANDBOX_STARTUP_HELPER" --startup-apply "$sandbox_name" "$agent"
+fi
+
 # Workload containers use Podman inside the sandbox, never a host socket.
 native_exec sbx exec --user root "$sandbox_name" sh -ec '
   if ! command -v podman >/dev/null 2>&1; then

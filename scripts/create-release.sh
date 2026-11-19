@@ -6,6 +6,7 @@ usage() {
 Usage: ./scripts/create-release.sh <sandbox> <platform>
 
 Sandboxes:
+  all | sandboxes | sandbox-launcher (one app with all types)
   python | python-sandbox
   r | r-sandbox
   bioinformatics | bioinformatics-sandbox
@@ -14,8 +15,8 @@ Platforms:
   macos | windows
 
 Examples:
-  ./scripts/create-release.sh python macos
-  ./scripts/create-release.sh r windows
+  ./scripts/create-release.sh all macos
+  ./scripts/create-release.sh all windows
 EOF
 }
 
@@ -25,6 +26,11 @@ EOF
 }
 
 case "$1" in
+  all | sandboxes | sandbox-launcher)
+    sandbox_dir="sandbox-launcher"
+    artifact_stem="VS-Code-Sandboxes"
+    app_name="VS Code Sandboxes"
+    ;;
   python | python-sandbox)
     sandbox_dir="python-sandbox"
     artifact_stem="Python-Sandbox"
@@ -77,7 +83,7 @@ if [[ "$platform" == "macos" ]]; then
     echo "Error: macOS releases must be built on macOS." >&2
     exit 1
   }
-  for dependency in bash hdiutil osacompile plutil; do
+  for dependency in bash hdiutil osacompile plutil go swiftc; do
     command -v "$dependency" >/dev/null 2>&1 || {
       echo "Error: $dependency is required to build a macOS release." >&2
       exit 1
@@ -90,11 +96,15 @@ if [[ "$platform" == "macos" ]]; then
 
   echo "Validating $app_name application sources..."
   plutil -lint "$app_path/Contents/Info.plist" >/dev/null
-  bash -n \
+  if [[ "$sandbox_dir" == sandbox-launcher ]]; then
+    bash -n "$app_path/Contents/MacOS/sandbox-launcher" "$sandbox_path/scripts/build-macos-dmg.sh"
+  else
+    bash -n \
     "$app_path/Contents/MacOS/${sandbox_dir%-sandbox}-sandbox" \
     "$app_path/Contents/Resources/$app_name.command" \
     "$repository_root/internal/launcherbundle/bundles/$sandbox_dir/scripts/setup-project.sh" \
     "$sandbox_path/scripts/build-macos-dmg.sh"
+  fi
   if [[ -f "$app_path/Contents/Resources/Setup Form.js" ]]; then
     osacompile -l JavaScript -o "$build_root/Setup Form.scpt" \
       "$app_path/Contents/Resources/Setup Form.js"

@@ -1,1 +1,10 @@
 .DS_Store
+
+# Compiled desktop helpers are rebuilt when packaging.
+**/Contents/Resources/Sandbox Desktop
+**/Contents/Resources/Sandbox Window
+# Generated all-in-one macOS payloads are staged by build-desktop.sh.
+/sandbox-launcher/assets/VS Code Sandboxes.app/Contents/Resources/Launchers/
+/sandbox-launcher/assets/VS Code Sandboxes.app/Contents/Resources/LICENSE
+/sandbox-launcher/assets/VS Code Sandboxes.app/Contents/Resources/THIRD-PARTY-NOTICES.txt
+todo.md
