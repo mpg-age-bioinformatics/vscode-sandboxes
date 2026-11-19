@@ -59,9 +59,6 @@ run_case() {
   [[ -f "$state" ]]
 }
 
-run_case python-app "$repository_root/python-sandbox/assets/Python Sandbox.app/Contents/Resources/Python Sandbox.command" 3.13 codex "$test_root/project"
-run_case r-app "$repository_root/r-sandbox/assets/R Sandbox.app/Contents/Resources/R Sandbox.command" 4.5 codex "$test_root/project"
-run_case bioinformatics-app "$repository_root/bioinformatics-sandbox/assets/Bioinformatics Sandbox.app/Contents/Resources/Bioinformatics Sandbox.command" codex "$test_root/project"
 run_case python-runtime "$repository_root/internal/launcherbundle/bundles/python-sandbox/assets/run-python-sandbox.sh" codex
 run_case r-runtime "$repository_root/internal/launcherbundle/bundles/r-sandbox/assets/run-r-sandbox.sh" codex
 run_case bioinformatics-runtime "$repository_root/internal/launcherbundle/bundles/bioinformatics-sandbox/assets/run-bioinformatics-sandbox.sh" codex

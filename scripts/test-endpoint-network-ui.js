@@ -5,7 +5,7 @@ const path=require('node:path');
 const vm=require('node:vm');
 const SiteListState=require('../internal/startui/site-presets.js');
 const html=fs.readFileSync(path.join(__dirname,'../internal/startui/window.html'),'utf8');
-const script=html.match(/<script>\n([\s\S]*?)<\/script>/)[1].replace("initialize().catch(e=>$('error').textContent=e.message);poll();",'');
+const script=html.match(/<script>\n([\s\S]*?)<\/script>/)[1].replace("initialize().catch(e=>{$('setupError').textContent=e.message;$('error').textContent=e.message;});poll();",'');
 function node(tag='input'){return {tagName:tag.toUpperCase(),focus(){this.focused=true;},select(){this.selected=true;},replaceWith(replacement){elements.set(this.id,replacement);},value:'',textContent:'',hidden:false,disabled:false,children:[],listeners:{},classList:{toggle(){}},
  replaceChildren(){this.children=[];this.value='';},append(child){this.children.push(child);},
  addEventListener(type,handler){const old=this.listeners[type];this.listeners[type]=old?(...args)=>{old(...args);handler(...args);}:handler;}};}

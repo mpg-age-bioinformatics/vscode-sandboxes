@@ -10,7 +10,10 @@ helpers = []
 for language in ('bioinformatics',):
     source = (root / f'internal/launcherbundle/bundles/{language}-sandbox/assets/run-{language}-sandbox.sh').read_text()
     helpers.append(source.split('    apt_with_lock_retry() {', 1)[1].split('\n  fi', 1)[0])
-script = 'set -e\napt_with_lock_retry() {' + helpers[0]
+native = (root / 'internal/launcherbundle/bundles/common/assets/initialize-bioinformatics.sh').read_text()
+helpers.append(native.split('    apt_with_lock_retry() {', 1)[1].split('\n  fi', 1)[0])
+assert helpers[0] == helpers[1], 'Native and compatibility bootstrap helpers differ'
+script = 'set -e\napt_with_lock_retry() {' + helpers[1]
 
 with tempfile.TemporaryDirectory() as directory:
     work = Path(directory)

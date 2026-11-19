@@ -6,20 +6,20 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 )
 
 type ProjectState struct {
-	DirectoryID string `json:"directoryID"`
-	Project     string `json:"project"`
-	Sandbox     string `json:"sandbox"`
-	Version     string `json:"version"`
-	SandboxName string `json:"sandboxName,omitempty"`
-	Commit      string `json:"commit"`
-	Ready       bool   `json:"ready"`
+	DirectoryID  string `json:"directoryID"`
+	RepositoryID string `json:"repositoryID,omitempty"`
+	Project      string `json:"project"`
+	Sandbox      string `json:"sandbox"`
+	Version      string `json:"version"`
+	SandboxName  string `json:"sandboxName,omitempty"`
+	Commit       string `json:"commit"`
+	Ready        bool   `json:"ready"`
 }
 
 func projectKey(project string) string {
@@ -32,48 +32,34 @@ func projectKey(project string) string {
 func projectStatePath(project string) string {
 	return filepath.Join(settingsDir(), "projects", projectKey(project)+".json")
 }
-func projectGit(project string, args ...string) (string, error) {
-	executable := "git"
-	if runtime.GOOS == "windows" {
-		if _, err := exec.LookPath(executable); err != nil {
-			for _, root := range []string{filepath.Join(os.Getenv("ProgramFiles"), "Git"), filepath.Join(os.Getenv("LocalAppData"), "Programs", "Git")} {
-				candidate := filepath.Join(root, "cmd", "git.exe")
-				if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-					executable = candidate
-					break
-				}
-			}
-		}
-	}
-	cmd := Command(executable, append([]string{"-C", project}, args...)...)
-	out, err := cmd.CombinedOutput()
+
+// Git is executed only inside the named sandbox, in its mounted workspace.
+func sandboxGit(name string, args ...string) (string, error) {
+	out, err := output(append([]string{"exec", name, "git"}, args...)...)
 	if err != nil {
-		return "", fmt.Errorf("git %s: %s", args[0], strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("sandbox git %s: %w: %s", args[0], err, strings.TrimSpace(out))
 	}
-	return strings.TrimSpace(string(out)), nil
+	return strings.TrimSpace(out), nil
 }
 func ProjectScript(project, slug string) string {
 	name := strings.TrimSuffix(slug, "-sandbox")
 	return filepath.Join(project, "code", ".sandbox", "run-"+name+"-sandbox.sh")
 }
 
-// A saved success record is bound to the directory identity and setup commit, so deleting
-// and recreating a folder cannot accidentally select a different old sandbox.
+// Folder inspection is filesystem-only. Git validity and setup ancestry are
+// verified inside the sandbox before a saved environment can be resumed.
 func ExistingProject(project string) *ProjectState {
 	if !filepath.IsAbs(project) {
 		return nil
 	}
-	top, err := projectGit(project, "rev-parse", "--show-toplevel")
-	if err != nil || projectKey(top) != projectKey(project) {
+	if _, err := os.Stat(filepath.Join(project, ".git")); err != nil {
 		return nil
 	}
 	var state ProjectState
-	if readJSON(projectStatePath(project), &state) == nil && projectKey(state.Project) == projectKey(project) && state.Ready && state.Commit != "" && state.DirectoryID != "" && state.DirectoryID == projectDirectoryID(project) {
+	if readJSON(projectStatePath(project), &state) == nil && projectKey(state.Project) == projectKey(project) && state.Ready && state.Commit != "" && state.DirectoryID != "" && state.DirectoryID == projectDirectoryID(project) && (state.RepositoryID == "" || state.RepositoryID == projectDirectoryID(filepath.Join(project, ".git"))) {
 		if _, err := FindSandbox(state.Sandbox); err == nil {
 			if _, err := os.Stat(ProjectScript(project, state.Sandbox)); err == nil {
-				if _, err := projectGit(project, "merge-base", "--is-ancestor", state.Commit, "HEAD"); err == nil {
-					return &state
-				}
+				return &state
 			}
 		}
 	}
@@ -92,20 +78,15 @@ func ExistingProject(project string) *ProjectState {
 	if _, err := os.Stat(ProjectScript(project, state.Sandbox)); err != nil {
 		return nil
 	}
-	head, err := projectGit(project, "rev-parse", "HEAD")
-	if err != nil {
-		return nil
-	}
-	state.Commit = head
 	return &state
 }
 
 func rememberProject(s Selection, name string) error {
-	head, err := projectGit(s.Project, "rev-parse", "HEAD")
+	head, err := sandboxGit(name, "rev-parse", "HEAD")
 	if err != nil {
 		return err
 	}
-	return writeJSON(projectStatePath(s.Project), ProjectState{DirectoryID: projectDirectoryID(s.Project), Project: s.Project, Sandbox: s.Sandbox, Version: s.Version, SandboxName: name, Commit: head, Ready: true})
+	return writeJSON(projectStatePath(s.Project), ProjectState{DirectoryID: projectDirectoryID(s.Project), RepositoryID: projectDirectoryID(filepath.Join(s.Project, ".git")), Project: s.Project, Sandbox: s.Sandbox, Version: s.Version, SandboxName: name, Commit: head, Ready: true})
 }
 
 var runtimeBaselinePaths = []string{"code/.sandbox/devcontainer.json", "code/.sandbox/container-image.lock.json", "code/.sandbox/bioconductor-config.yaml", ".Rprofile", ".Renviron", "renv.lock", "renv/activate.R", "renv/settings.json", "renv/.gitignore"}
@@ -114,7 +95,10 @@ var runtimeBaselinePaths = []string{"code/.sandbox/devcontainer.json", "code/.sa
 // staging area alone. A new repository retains one initial setup commit.
 func finalizeProject(s Selection, name string, log io.Writer) error {
 	if old := ExistingProject(s.Project); old != nil && old.Ready {
-		return nil
+		if _, err := sandboxGit(name, "merge-base", "--is-ancestor", old.Commit, "HEAD"); err == nil {
+			return rememberProject(s, name)
+		}
+		return fmt.Errorf("The saved setup commit is missing from this repository. Verify the project history before restarting.")
 	}
 	var paths []string
 	if s.FreshRepository {
@@ -135,10 +119,10 @@ func finalizeProject(s Selection, name string, log io.Writer) error {
 		}
 	}
 	if len(paths) > 0 {
-		if _, err := projectGit(s.Project, append([]string{"add", "-A", "--"}, paths...)...); err != nil {
+		if _, err := sandboxGit(name, append([]string{"add", "-A", "--"}, paths...)...); err != nil {
 			return err
 		}
-		changed, err := projectGit(s.Project, append([]string{"diff", "--cached", "--name-only", "--"}, paths...)...)
+		changed, err := sandboxGit(name, append([]string{"diff", "--cached", "--name-only", "--"}, paths...)...)
 		if err != nil {
 			return err
 		}
@@ -149,7 +133,7 @@ func finalizeProject(s Selection, name string, log io.Writer) error {
 			}
 			args = append(args, "--")
 			args = append(args, paths...)
-			if _, err := projectGit(s.Project, args...); err != nil {
+			if _, err := sandboxGit(name, args...); err != nil {
 				return err
 			}
 		}

@@ -336,3 +336,47 @@ restarts, restoration of language/version, and rejection of stale success record
 Run `node scripts/test-activity-export-ui.js` for native/browser export behavior.
 The development-container config tests also verify that resumed containers skip
 initialization but still run environment checks.
+
+## Native host startup
+
+`internal/startui/native_launch.go` is the shared macOS/Windows dispatcher. It
+calls the native `sbx` CLI, streams embedded setup files to sandbox-local temporary
+storage, and runs setup, skills cloning, repository checks, and commits inside
+the mounted sandbox workspace. Host Git, Git Bash, cygpath, tar, Python, Node, and
+container engines are not runtime prerequisites. Windows launches VS Code's CLI
+through `Code.exe` with `ELECTRON_RUN_AS_NODE=1`, without a command shell.
+
+Project selection reads local metadata without invoking Git. After mounting the
+workspace, startup validates the saved setup commit inside the sandbox before
+resuming initialization. Repository and folder identities prevent stale success
+records from silently reusing replaced projects. Existing per-project launchers
+keep their generated configuration; upgrading their bundled controller is needed
+to use the native path.
+
+Run `go test ./...` for native startup regressions. The boundary tests execute
+real setup/Git against temporary fixtures behind an emulated sbx CLI while host
+Git, Bash, cygpath, Docker, and Podman are traps. They cover all three fresh setup
+flows, a single initial commit, staged edits on restart, and policy/runtime
+failures. The legacy shell workflow tests remain for compatibility entry points.
+
+## Prerequisite setup screen
+
+`internal/startui/prerequisites.go` detects Docker Sandboxes and VS Code on every
+launch and discovers newly installed tools outside the process's original PATH.
+The shared UI gates both first-time and project startup, refreshes detection, and
+only installs after an explicit Install missing components action. The controller
+rechecks readiness before startup, serializes installation with startup, and
+keeps the window open while installing.
+
+Vendor downloads are pinned by version and SHA-256. Updating those constants
+requires checking the official Docker release digests or Microsoft update API
+metadata, then testing the installers on each target OS. macOS uses the complete
+Docker archive layout and Microsoft's signed app; Windows verifies Authenticode
+publisher signatures before invoking the official installers. Existing installs
+are never overwritten. Vendor binaries belong in the user's download cache,
+not the repository or release assets.
+
+Run `node scripts/test-prerequisites-ui.js` and `go test ./internal/startui` for
+missing-tool combinations, project-launcher gating, install/recheck transitions,
+removal detection, verified downloads, offline cache reuse, checksum rejection,
+installer serialization/failures, and preservation of existing installs.

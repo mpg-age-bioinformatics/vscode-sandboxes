@@ -5,7 +5,7 @@ const vm=require('node:vm');
 const SiteListState=require('../internal/startui/site-presets.js');
 const html=fs.readFileSync(require('node:path').join(__dirname,'../internal/startui/window.html'),'utf8');
 assert(html.indexOf('id="project"')<html.indexOf('id="sandbox"'),'Project folder must be first');
-const script=html.match(/<script>\n([\s\S]*?)<\/script>/)[1].replace("initialize().catch(e=>$('error').textContent=e.message);poll();",'');
+const script=html.match(/<script>\n([\s\S]*?)<\/script>/)[1].replace("initialize().catch(e=>{$('setupError').textContent=e.message;$('error').textContent=e.message;});poll();",'');
 function harness(overrides={}){
  const root='/Users/test/sandboxes',recommended=root+'/python-sandbox-project';
  const defaults={slug:'python-sandbox',project:recommended,projectRoot:root,platform:'darwin',version:'3.13',versionLabel:'Python version',saved:{},import:'',sitePresets:{'python-sandbox':['pypi.org']},...overrides};

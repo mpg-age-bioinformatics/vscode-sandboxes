@@ -2,7 +2,6 @@ package startui
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -43,20 +42,19 @@ func TestProjectAccessDetectsUnreadableFolder(t *testing.T) {
 	}
 }
 
-func TestProjectAccessChecksExistingSkillsBeforeStartup(t *testing.T) {
+func TestProjectAccessDoesNotRequireHostGit(t *testing.T) {
 	project := t.TempDir()
-	skills := filepath.Join(project, "skills")
-	cmd := exec.Command("git", "init", "-q", skills)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git init: %v: %s", err, out)
+	skills := filepath.Join(project, "skills", ".git")
+	if err := os.MkdirAll(skills, 0755); err != nil {
+		t.Fatal(err)
 	}
+	// Git configuration is checked later, inside sbx; no host tool is needed
+	// while reviewing or selecting a project folder.
+	if err := os.WriteFile(filepath.Join(skills, "config"), []byte("[broken\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", t.TempDir())
 	if err := CheckProjectAccess(project); err != nil {
 		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(skills, ".git", "config"), []byte("[broken\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := CheckProjectAccess(project); err == nil || !strings.Contains(err.Error(), skills) || !strings.Contains(err.Error(), "bad config") {
-		t.Fatalf("Git failure hidden: %v", err)
 	}
 }

@@ -73,3 +73,11 @@ func Materialize(slug, destination string) error {
 	}
 	return nil
 }
+
+// CommonAsset returns a trusted embedded script for execution inside sbx.
+func CommonAsset(name string) ([]byte, error) {
+	if strings.ContainsAny(name, "/\\") {
+		return nil, fmt.Errorf("invalid common asset name")
+	}
+	return bundles.ReadFile("bundles/common/assets/" + name)
+}

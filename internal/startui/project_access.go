@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 )
 
 // CheckProjectAccess runs before starting the daemon or changing network policy.
@@ -35,16 +34,6 @@ func CheckProjectAccess(project string) error {
 		if _, err := cmd.Output(); err != nil {
 			return projectAccessError(project, err)
 		}
-	}
-	if _, err := os.Stat(filepath.Join(project, "skills", ".git")); err == nil {
-		cmd := exec.Command("git", "-C", filepath.Join(project, "skills"), "rev-parse", "--git-dir")
-		cmd.Dir = project
-		hideWindow(cmd)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return projectAccessError(filepath.Join(project, "skills"), fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output))))
-		}
-	} else if !os.IsNotExist(err) {
-		return projectAccessError(filepath.Join(project, "skills"), err)
 	}
 	probe, err := os.CreateTemp(project, ".sandbox-access-*")
 	if err != nil {

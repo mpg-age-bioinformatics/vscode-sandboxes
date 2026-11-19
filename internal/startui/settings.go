@@ -260,6 +260,11 @@ func endpointConfig(s Selection) ([]byte, error) {
 
 // Command starts a child process without opening an additional console on Windows.
 func Command(name string, args ...string) *exec.Cmd {
+	if name == "sbx" || name == "sbx.exe" {
+		if path, err := SandboxCLI(); err == nil {
+			name = path
+		}
+	}
 	cmd := exec.Command(name, args...)
 	hideWindow(cmd)
 	return cmd
@@ -303,18 +308,8 @@ func PrepareEnvironment(s Selection) ([]string, func(), error) {
 		}
 		connectionData = data
 	}
+	// Repository inspection happens after the workspace is mounted in sbx.
 	s.FreshRepository, s.PreservePaths = false, nil
-	top, repoErr := projectGit(s.Project, "rev-parse", "--show-toplevel")
-	if _, err := projectGit(s.Project, "rev-parse", "HEAD"); err != nil || repoErr != nil || projectKey(top) != projectKey(s.Project) {
-		s.FreshRepository = true
-	}
-	if !s.FreshRepository {
-		for _, path := range runtimeBaselinePaths {
-			if dirty, err := projectGit(s.Project, "status", "--porcelain", "--", path); err == nil && dirty != "" {
-				s.PreservePaths = append(s.PreservePaths, path)
-			}
-		}
-	}
 	dir, err := os.MkdirTemp("", "sandbox-startup-*")
 	if err != nil {
 		return nil, nil, err
@@ -349,14 +344,14 @@ func PrepareEnvironment(s Selection) ([]string, func(), error) {
 }
 
 func command(log io.Writer, args ...string) error {
-	cmd := exec.Command("sbx", args...)
+	cmd := Command("sbx", args...)
 	hideWindow(cmd)
 	cmd.Stdout = log
 	cmd.Stderr = log
 	return cmd.Run()
 }
 func output(args ...string) (string, error) {
-	cmd := exec.Command("sbx", args...)
+	cmd := Command("sbx", args...)
 	hideWindow(cmd)
 	data, err := cmd.CombinedOutput()
 	return string(data), err
@@ -438,7 +433,7 @@ if [ ! -e .sandbox-managed ]; then
 fi
 cat > .sandbox-config.tmp
 mv .sandbox-config.tmp config.yaml`
-		cmd := exec.Command("sbx", "exec", "-i", name, "sh", "-c", script)
+		cmd := Command("sbx", "exec", "-i", name, "sh", "-c", script)
 		hideWindow(cmd)
 		cmd.Stdin = bytes.NewReader(data)
 		cmd.Stdout, cmd.Stderr = log, log
@@ -457,7 +452,7 @@ if [ -e "$HOME/.continue/.sandbox-managed" ]; then
   if [ -e .sandbox-original-config.yaml ]; then mv .sandbox-original-config.yaml config.yaml; else rm -f config.yaml; fi
   rm -f .sandbox-managed
 fi`
-		cmd := exec.Command("sbx", "exec", name, "sh", "-c", script)
+		cmd := Command("sbx", "exec", name, "sh", "-c", script)
 		hideWindow(cmd)
 		cmd.Stdout, cmd.Stderr = log, log
 		if err := cmd.Run(); err != nil {
@@ -500,7 +495,7 @@ fi`
 		if s.ConfigFile != "" {
 			mode = "import"
 		}
-		cmd := exec.Command("sbx", "exec", "-i", name, "sh", "-c", script, "startup", mode, s.Endpoint)
+		cmd := Command("sbx", "exec", "-i", name, "sh", "-c", script, "startup", mode, s.Endpoint)
 		hideWindow(cmd)
 		cmd.Stdin = bytes.NewReader(data)
 		cmd.Stdout = log

@@ -6,7 +6,7 @@ const SiteListState=require('../internal/startui/site-presets.js');
 const html=fs.readFileSync(require('node:path').join(__dirname,'../internal/startui/window.html'),'utf8');
 assert(/id="token" type="password"/.test(html),'The retained key must stay masked');
 assert(!/id="(?:endpoint|configFile|model|browseConfig|newConfig|saveConfig|listModels)"/.test(html));
-const script=html.match(/<script>\n([\s\S]*?)<\/script>/)[1].replace("initialize().catch(e=>$('error').textContent=e.message);poll();",'');
+const script=html.match(/<script>\n([\s\S]*?)<\/script>/)[1].replace("initialize().catch(e=>{$('setupError').textContent=e.message;$('error').textContent=e.message;});poll();",'');
 function harness(){
  const elements=new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,{value:'',listeners:{},textContent:'',replaceChildren(){},classList:{toggle(){}},addEventListener(type,handler){const previous=this.listeners[type];this.listeners[type]=previous?(...args)=>{previous(...args);return handler(...args);}:handler;}}]));
  const element=id=>{assert(elements.has(id),'Unknown/removed UI element: '+id);return elements.get(id);};

@@ -99,8 +99,8 @@ subdomain patterns, and optional ports. A private endpoint’s host is added
 automatically with a warning. Private
 endpoints cannot be used with No internet; startup is blocked with an explanation.
 Include any additional package registries needed for setup. The restrictions apply to the sandbox;
-host Git clones, base sandbox-template downloads, Docker authentication, and host
-VS Code installation still use the host connection. Python/R image pulls, feature
+base sandbox-template downloads, Docker authentication, and host
+VS Code installation still use the host connection. Skills Git clones, Python/R image pulls, feature
 builds, and dependency installation run inside the sandbox and obey its policy. A first launch without package
 registry access can fail until its dependencies have been prepared.
 
@@ -205,24 +205,51 @@ Each agent's sandbox sign-in state survives container recreation.
 An endpoint on the host must use a hostname reachable from the sandbox;
 `localhost` inside the sandbox refers to the sandbox itself.
 
+## Required tools setup
+
+Every launch checks for Docker Sandboxes and Visual Studio Code, including launches
+from an existing project's app or executable. If either tool is missing, **Set up
+your computer** appears automatically and workspace startup stays blocked. There
+is no permanent dismissal; removing a tool brings this screen back.
+
+Choose **Install missing components** to download and install only the missing
+tools from Docker and Microsoft. Downloads are checksum-verified and cached for
+retries. Existing installations are kept. You can instead use the official links,
+install the tools yourself, and choose **Check again**. Detection also refreshes
+while the window is open and when it regains focus, so a launcher restart is
+normally unnecessary. Both tools must be detected before workspace setup appears.
+
+On macOS, this installs Docker Sandboxes with its runtime files under
+`~/Library/Application Support/VS Code Sandboxes/tools/` and VS Code under
+`~/Applications/`. Homebrew and administrator access are not required. On Windows,
+the official installers are used; finish any installer or administrator prompts.
+Windows OpenSSH and Windows Hypervisor Platform still need to be available, and
+virtualization setup can require a Windows restart. Docker sign-in follows during
+workspace startup.
+
+The launcher downloads the tested Docker Sandboxes 0.39.0 and VS Code 1.147.0
+installers when needed; it does not replace or downgrade detected installations.
+Vendor software is downloaded to your computer during setup and is not included
+in our distributed app. The setup screen links the applicable vendor terms.
+
 ## macOS
 
 ### macOS requirements
 
 Docker Sandboxes currently requires an Apple silicon Mac running macOS Sonoma
-14 or newer. Install and configure:
+14 or newer. The following are required; the setup screen can install Docker
+Sandboxes and VS Code if they are missing:
 
-- [Git](https://git-scm.com/download/mac);
 - [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/install/) with the
   `sbx` command, version 0.39.0 or newer;
 - [Visual Studio Code](https://code.visualstudio.com/docs/setup/mac) for macOS;
   and
-- access to the coding agent you intend to use: Codex or Claude Code.
+- an OpenAI or Claude account, or a private LLM endpoint with its authentication key.
 
 The startup app runs `sbx login` automatically when Docker authentication is required.
 Complete the browser sign-in when prompted. You can also sign in ahead of time with `sbx login`.
 
-**Host Docker Desktop, Docker Engine, and Podman are not required.** The standard
+**Host Git, Docker Desktop, Docker Engine, and Podman are not required.** The standard
 shell sandbox provides its own Docker Engine for Python/R development containers.
 Install VS Code's Remote-SSH and Dev Containers extensions; the launcher also
 checks/installs those extensions before opening the workspace.
@@ -234,37 +261,36 @@ New projects get one initial commit containing the completed setup, including
 files generated during runtime initialization, before VS Code opens. Existing
 repositories get focused setup commits without including unrelated user edits.
 If Git identity is missing, setup uses `Sandbox Launcher <sandbox@localhost>`
-in that repository only. You can configure your own identity beforehand:
+in that repository only. Git runs inside the sandbox; host Git configuration is
+not required or copied. To set your own identity, run these commands in the
+project terminal inside the development environment:
 
 ```bash
-git config --global user.name "Your Name"
-git config --global user.email "you@example.com"
+git config user.name "Your Name"
+git config user.email "you@example.com"
 ```
 
 ### Verify macOS requirements before downloading
 
-Run these checks in Terminal before downloading a sandbox application:
+If you already installed the required tools, you can verify them in Terminal
+with these checks. Otherwise, open the app and use its setup screen:
 
 ```bash
 uname -m
 sw_vers -productVersion
-git --version
 ssh -V
 code --version
 sbx version
 sbx login
 sbx setup ssh
 sbx diagnose
-git config --global --get user.name
-git config --global --get user.email
 ```
 
 `uname -m` must report `arm64`, macOS must be Sonoma 14 or newer, `sbx` must be
 0.39.0 or newer, and `sbx diagnose` must finish without failed checks. The
 `sbx login` command is interactive; complete the sign-in before continuing.
 
-If either Git identity command prints nothing, configure the missing value
-before running a launcher. No host container-runtime checks are needed.
+No host Git or container-runtime checks are needed.
 
 ### Install the macOS application
 
@@ -327,14 +353,15 @@ with Windows Hypervisor Platform enabled. Windows 10, Windows Server, ARM64
 Windows, and systems without usable hardware virtualization are not supported by
 Docker Sandboxes.
 
-Install these prerequisites first:
+The following prerequisites are required. The setup screen can install Docker
+Sandboxes and VS Code; Windows OpenSSH and virtualization must also be enabled:
 
-- [Git for Windows](https://git-scm.com/download/win), including Git Bash;
 - the Windows OpenSSH Client optional feature;
 - [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/install/) 0.39.0 or
   newer, then complete the browser sign-in when the startup app requests it;
 - [Visual Studio Code](https://code.visualstudio.com/) with Remote-SSH and Dev
-  Containers extensions, and access to Codex or Claude Code.
+  Containers extensions;
+- an OpenAI or Claude account, or a private LLM endpoint with its authentication key.
 
 Use a project folder on a local Windows drive. Network shares and WSL UNC paths
 are rejected because they do not provide the local filesystem behavior required
@@ -344,7 +371,8 @@ Podman. General bioinformatics uses sandbox-local Podman for its workload contai
 
 ### Verify Windows requirements before downloading
 
-Open PowerShell and run these checks before downloading a sandbox executable:
+If you already installed the required tools, you can verify them in PowerShell
+with these checks. Otherwise, open the app and use its setup screen:
 
 ```powershell
 [Environment]::Is64BitOperatingSystem
@@ -352,26 +380,22 @@ Get-CimInstance Win32_OperatingSystem |
   Select-Object Caption, Version, BuildNumber, OSArchitecture
 Get-ComputerInfo -Property HyperVisorPresent
 $env:Path = "$env:WINDIR\System32\OpenSSH;$env:Path"
-git.exe --version
-& "C:\Program Files\Git\bin\bash.exe" --version
 & "$env:WINDIR\System32\OpenSSH\ssh.exe" -V
 code.cmd --version
 sbx.exe version
 sbx.exe login
 sbx.exe setup ssh
 sbx.exe diagnose
-git.exe config --global --get user.name
-git.exe config --global --get user.email
 ```
 
 The first command must print `True`, the operating-system details must show
 64-bit Windows 11 build 22000 or newer, `HyperVisorPresent` must be `True`, `sbx`
 must be 0.39.0 or newer, and `sbx diagnose` must finish without failed checks.
 Complete the interactive `sbx login` before running SSH setup and diagnostics.
-The temporary `PATH` update makes the checks use Windows OpenSSH rather than
-Git's bundled SSH client. If Git Bash was installed somewhere else, replace its
-path in the command above. If either Git identity command prints nothing,
-configure the missing value before running a launcher.
+The temporary `PATH` update makes the checks use Windows OpenSSH. Neither Git
+for Windows nor Git Bash is required. The native launcher calls `sbx` and VS Code
+directly; setup scripts, skills cloning, repository initialization, and Git checks
+run inside the sandbox.
 
 ### Download the Windows executable
 
@@ -565,9 +589,12 @@ Confirm that the app came from the
 page before
 overriding Gatekeeper.
 
-### `Git is required`
+### Git errors during setup
 
-Install Git, reopen Terminal, and verify that `git --version` works.
+Git runs inside the standard shell sandbox. If startup reports that sandbox Git
+is unavailable, check the sandbox template and its environment. Installing Git
+on the host does not repair the sandbox. For older downloads that request host
+Git or Git Bash, update to a build with native sandbox startup.
 
 ### `sbx is not installed`
 

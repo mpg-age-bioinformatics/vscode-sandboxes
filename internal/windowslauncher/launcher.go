@@ -2,7 +2,6 @@ package windowslauncher
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,7 +14,6 @@ import (
 	"strings"
 
 	licensing "github.com/mpg-age-bioinformatics/vscode-sandboxes"
-	"github.com/mpg-age-bioinformatics/vscode-sandboxes/internal/launcherbundle"
 	"github.com/mpg-age-bioinformatics/vscode-sandboxes/internal/startui"
 )
 
@@ -28,16 +26,6 @@ type Config struct {
 	VersionPrompt  string
 	NeedsVersion   bool
 	DefaultVersion string
-}
-
-type setupSelection struct {
-	version string
-	agent   string
-	project string
-}
-
-type dependencies struct {
-	bash string
 }
 
 func Main(config Config) {
@@ -59,39 +47,7 @@ func Main(config Config) {
 			}
 		}
 	}
-	if len(os.Args) == 2 && os.Args[1] == "--startup-worker" {
-		var selected startui.Selection
-		data, err := os.ReadFile(os.Getenv("VSCODE_SANDBOX_STARTUP_SELECTION"))
-		if err == nil {
-			err = json.Unmarshal(data, &selected)
-		}
-		if err == nil && config.Unified {
-			config, err = configForSandbox(selected.Sandbox)
-		}
-		if err == nil {
-			if invokedAsProjectRunner(config, executablePath()) {
-				err = runProject(config)
-			} else {
-				var deps dependencies
-				deps, err = checkDependencies()
-				if err == nil {
-					err = run(config, deps, setupSelection{selected.Version, selected.Agent, selected.Project})
-				}
-				if err == nil {
-					var launcher string
-					launcher, err = cygpath(deps.bash, filepath.Join(selected.Project, "code", ".sandbox", config.ShellLauncher))
-					if err == nil {
-						err = runVisible(deps.bash, launcher, selected.Agent)
-					}
-				}
-			}
-		}
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
-	}
+
 	home, _ := os.UserHomeDir()
 	c := startui.Config{Name: config.AppName, Slug: config.SandboxSlug, Version: config.DefaultVersion, VersionLabel: config.VersionPrompt, Agent: "both", Project: filepath.Join(home, "sandboxes", config.SandboxSlug+"-project")}
 	if !config.NeedsVersion {
@@ -107,16 +63,10 @@ func Main(config Config) {
 		c.Agent = strings.TrimSpace(string(agent))
 	}
 	err := startui.Run(c, func(selected startui.Selection, log io.Writer) error {
-		env, cleanup, err := startui.PrepareEnvironment(selected)
-		if err != nil {
+		if err := checkDependencies(); err != nil {
 			return err
 		}
-		defer cleanup()
-		cmd := startui.Command(executablePath(), "--startup-worker")
-		cmd.Env = append(os.Environ(), env...)
-		cmd.Stdout = log
-		cmd.Stderr = log
-		return cmd.Run()
+		return startui.LaunchSandbox(selected, log)
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -124,54 +74,41 @@ func Main(config Config) {
 	}
 }
 
-func checkDependencies() (dependencies, error) {
+func checkDependencies() error {
 	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
-		return dependencies{}, errors.New("this executable requires 64-bit Windows on an Intel or AMD processor")
+		return errors.New("this executable requires 64-bit Windows on an Intel or AMD processor")
 	}
 	nativeArch := strings.ToUpper(getenv("PROCESSOR_ARCHITEW6432", os.Getenv("PROCESSOR_ARCHITECTURE")))
 	if nativeArch != "AMD64" && nativeArch != "X86_64" {
-		return dependencies{}, fmt.Errorf("Docker Sandboxes requires an Intel or AMD 64-bit processor; detected %s", nativeArch)
+		return fmt.Errorf("Docker Sandboxes requires an Intel or AMD 64-bit processor; detected %s", nativeArch)
 	}
 	if err := checkWindows11(); err != nil {
-		return dependencies{}, err
+		return err
 	}
 
-	if _, err := requireCommand("git.exe", "Install Git for Windows: https://git-scm.com/download/win"); err != nil {
-		return dependencies{}, err
-	}
-	bash, err := findGitBash()
-	if err != nil {
-		return dependencies{}, err
-	}
 	ssh, err := requireCommand("ssh.exe", "Install the Windows OpenSSH Client optional feature.")
 	if err != nil {
-		return dependencies{}, err
+		return err
 	}
 	ssh = preferredWindowsSSHPath(ssh)
 	if err := os.Setenv("PATH", filepath.Dir(ssh)+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
-		return dependencies{}, fmt.Errorf("prioritize Windows OpenSSH: %w", err)
+		return fmt.Errorf("prioritize Windows OpenSSH: %w", err)
 	}
-	sbx, err := requireCommand("sbx.exe", "Install Docker Sandboxes with: winget install -h Docker.sbx")
+	sbx, err := startui.SandboxCLI()
 	if err != nil {
-		return dependencies{}, err
+		return err
 	}
 	if err := checkSBXVersion(sbx); err != nil {
-		return dependencies{}, err
-	}
-	if err := runVisible(sbx, "setup", "ssh"); err != nil {
-		return dependencies{}, fmt.Errorf("configure Docker Sandboxes SSH access: %w", err)
-	}
-	if err := runVisible(sbx, "diagnose"); err != nil {
-		return dependencies{}, fmt.Errorf("Docker Sandboxes diagnostics failed after SSH setup; confirm virtualization is enabled and run 'sbx login': %w", err)
+		return err
 	}
 
 	if err := addVSCodeToPath(); err != nil {
-		return dependencies{}, err
+		return err
 	}
 	if err := configureVSCodeSSHPath(ssh); err != nil {
-		return dependencies{}, err
+		return err
 	}
-	return dependencies{bash: bash}, nil
+	return nil
 }
 
 func configureVSCodeSSHPath(discoveredSSH string) error {
@@ -230,78 +167,6 @@ func ensureJSONCStringSetting(path, key, value string) (bool, error) {
 	return true, nil
 }
 
-func run(config Config, deps dependencies, selection setupSelection) error {
-	if selection.agent != "both" && selection.agent != "codex" && selection.agent != "claude" {
-		return errors.New("unsupported legacy agent argument")
-	}
-	if config.NeedsVersion && !regexp.MustCompile(`^[0-9]+\.[0-9]+(\.[0-9]+)?$`).MatchString(selection.version) {
-		return errors.New("version must use major.minor or major.minor.patch format")
-	}
-
-	projectInput := strings.TrimSpace(selection.project)
-	if !filepath.IsAbs(projectInput) {
-		return errors.New("project folder must be an absolute path on a local Windows drive")
-	}
-	project := filepath.Clean(projectInput)
-	if isUNCPath(project) {
-		return errors.New("network and WSL project folders are not supported; choose a folder on a local Windows drive")
-	}
-	if err := os.MkdirAll(project, 0755); err != nil {
-		return fmt.Errorf("create project directory: %w", err)
-	}
-
-	if existing := startui.ExistingProject(project); existing != nil {
-		fmt.Println("Reopening the existing sandbox project; skipping project scaffolding.")
-		return nil
-	}
-	tempRoot, err := os.MkdirTemp("", config.SandboxSlug+"-app-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tempRoot)
-	setupDir := filepath.Join(tempRoot, "setup")
-	if err := launcherbundle.Materialize(config.SandboxSlug, setupDir); err != nil {
-		return fmt.Errorf("extract embedded setup files: %w", err)
-	}
-	setupScript := filepath.Join(setupDir, "scripts", "setup-project.sh")
-	if info, err := os.Stat(setupScript); err != nil || info.IsDir() {
-		return fmt.Errorf("embedded setup is incomplete: %s", setupScript)
-	}
-	unixSetupScript, err := cygpath(deps.bash, setupScript)
-	if err != nil {
-		return err
-	}
-	unixProject, err := cygpath(deps.bash, project)
-	if err != nil {
-		return err
-	}
-	executable, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("locate launcher executable: %w", err)
-	}
-	unixExecutable, err := cygpath(deps.bash, executable)
-	if err != nil {
-		return err
-	}
-	args := []string{unixSetupScript, unixProject}
-	if config.NeedsVersion {
-		args = append(args, selection.version)
-	}
-	args = append(args, selection.agent)
-	fmt.Println("Starting setup...")
-	if err := runVisibleEnv(deps.bash, []string{
-		"VSCODE_SANDBOX_PROJECT_RUNNER_SOURCE=" + unixExecutable,
-		"VSCODE_SANDBOX_PROJECT_RUNNER_AGENT=" + selection.agent,
-	}, args...); err != nil {
-		return fmt.Errorf("sandbox setup failed: %w", err)
-	}
-	runner := filepath.Join(project, "code", ".sandbox", config.ProjectRunner)
-	if info, err := os.Stat(runner); err != nil || info.IsDir() {
-		return fmt.Errorf("setup did not create the Windows project runner: %s", runner)
-	}
-	return nil
-}
-
 func executablePath() string {
 	path, _ := os.Executable()
 	return path
@@ -310,50 +175,6 @@ func executablePath() string {
 func invokedAsProjectRunner(config Config, executable string) bool {
 	portablePath := strings.ReplaceAll(executable, `\`, "/")
 	return strings.EqualFold(filepath.Base(portablePath), config.ProjectRunner)
-}
-
-func runProject(config Config) error {
-	if config.ShellLauncher == "" {
-		return errors.New("project shell launcher is not configured")
-	}
-	executable, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("locate project runner: %w", err)
-	}
-	codeDir := filepath.Dir(executable)
-	agentPath := filepath.Join(codeDir, "."+config.SandboxSlug+"-agent")
-	agentData, err := os.ReadFile(agentPath)
-	if err != nil {
-		return fmt.Errorf("read project runner configuration: %w", err)
-	}
-	agent := strings.TrimSpace(string(agentData))
-	if agent != "both" && agent != "codex" && agent != "claude" {
-		return errors.New("the project runner has an invalid configured agent")
-	}
-	launcher := filepath.Join(codeDir, config.ShellLauncher)
-	if info, err := os.Stat(launcher); err != nil || info.IsDir() {
-		return fmt.Errorf("project launcher is unavailable: %s", launcher)
-	}
-	bash, err := findGitBash()
-	if err != nil {
-		return err
-	}
-	if err := addVSCodeToPath(); err != nil {
-		return err
-	}
-	unixLauncher, err := cygpath(bash, launcher)
-	if err != nil {
-		return err
-	}
-	cmd := startui.Command(bash, unixLauncher, agent)
-	cmd.Dir = filepath.Dir(filepath.Dir(codeDir))
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("sandbox launcher failed: %w", err)
-	}
-	return nil
 }
 
 func checkWindows11() error {
@@ -398,33 +219,6 @@ func checkSBXVersion(sbx string) error {
 	return nil
 }
 
-func findGitBash() (string, error) {
-	candidates := []string{
-		filepath.Join(os.Getenv("ProgramFiles"), "Git", "bin", "bash.exe"),
-		filepath.Join(os.Getenv("ProgramFiles"), "Git", "usr", "bin", "bash.exe"),
-		filepath.Join(os.Getenv("LocalAppData"), "Programs", "Git", "bin", "bash.exe"),
-	}
-	if path, err := exec.LookPath("bash.exe"); err == nil {
-		candidates = append(candidates, path)
-	}
-	seen := map[string]bool{}
-	for _, path := range candidates {
-		if path == "" || seen[strings.ToLower(path)] {
-			continue
-		}
-		seen[strings.ToLower(path)] = true
-		if info, err := os.Stat(path); err == nil && !info.IsDir() && isGitBash(path) {
-			return path, nil
-		}
-	}
-	return "", errors.New("Git Bash is required; install Git for Windows from https://git-scm.com/download/win")
-}
-
-func isGitBash(path string) bool {
-	out, err := startui.Command(path, "-lc", `printf '%s' "$(uname -s)"; command -v cygpath >/dev/null`).CombinedOutput()
-	return err == nil && strings.HasPrefix(strings.ToUpper(strings.TrimSpace(string(out))), "MINGW")
-}
-
 func addVSCodeToPath() error {
 	if _, err := exec.LookPath("code.cmd"); err == nil {
 		return nil
@@ -439,17 +233,6 @@ func addVSCodeToPath() error {
 		}
 	}
 	return errors.New("Visual Studio Code is required; install it from https://code.visualstudio.com/")
-}
-
-func cygpath(bash, path string) (string, error) {
-	cmd := startui.Command(bash, "-lc", `cygpath -u "$1"`, "launcher", path)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("convert Windows path for Git Bash: %w", err)
-	}
-	return strings.TrimSpace(out.String()), nil
 }
 
 func requireCommand(name, help string) (string, error) {

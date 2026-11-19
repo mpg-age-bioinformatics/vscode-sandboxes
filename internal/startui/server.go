@@ -122,6 +122,7 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 	}
 	path := "/" + hex.EncodeToString(key) + "/"
 	state := &logState{answer: make(chan bool, 1)}
+	prerequisites := &prerequisiteSetup{}
 	var folderPicker sync.Mutex
 	closed := make(chan struct{}, 1)
 	mux := http.NewServeMux()
@@ -149,15 +150,40 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 		case "defaults":
 			c := struct {
 				Config
-				Saved       Selection           `json:"saved"`
-				SitePresets map[string][]string `json:"sitePresets"`
-				ProjectRoot string              `json:"projectRoot"`
-				Platform    string              `json:"platform"`
-			}{Config: config, SitePresets: sitePresets(), ProjectRoot: RecommendedProjectRoot(), Platform: runtime.GOOS}
+				Saved         Selection           `json:"saved"`
+				SitePresets   map[string][]string `json:"sitePresets"`
+				ProjectRoot   string              `json:"projectRoot"`
+				Platform      string              `json:"platform"`
+				Prerequisites Prerequisites       `json:"prerequisites"`
+			}{Config: config, SitePresets: sitePresets(), ProjectRoot: RecommendedProjectRoot(), Platform: runtime.GOOS, Prerequisites: prerequisites.status()}
 			_ = readJSON(filepath.Join(settingsDir(), config.Slug+".json"), &c.Saved)
 			c.Saved.ConfigFile, c.Saved.Model, c.Saved.Token = "", "", ""
 			c.Saved.ConfigOverrides = false
 			_ = json.NewEncoder(w).Encode(c)
+		case "prerequisites":
+			if r.Method != "GET" {
+				http.Error(w, "GET required", 405)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(prerequisites.status())
+		case "install-prerequisites":
+			if r.Method != "POST" {
+				http.Error(w, "POST required", 405)
+				return
+			}
+			state.Lock()
+			if state.Running {
+				state.Unlock()
+				http.Error(w, "Wait for sandbox startup to finish.", 409)
+				return
+			}
+			err := prerequisites.start()
+			state.Unlock()
+			if err != nil {
+				http.Error(w, err.Error(), 409)
+				return
+			}
+			w.WriteHeader(http.StatusAccepted)
 		case "project-location":
 			if r.Method != "POST" {
 				http.Error(w, "POST required", 405)
@@ -258,6 +284,11 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 				}
 			}
 			state.Lock()
+			if !prerequisites.status().Ready {
+				state.Unlock()
+				http.Error(w, "Complete setup: Docker Sandboxes and Visual Studio Code must both be detected before startup.", 409)
+				return
+			}
 			if state.Running {
 				state.Unlock()
 				http.Error(w, "already starting", 409)
@@ -288,11 +319,6 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 				}
 				if err == nil {
 					err = execute(selection, state)
-					if err == nil {
-						if old := ExistingProject(selection.Project); old != nil && !old.Ready {
-							err = rememberProject(selection, "")
-						}
-					}
 				}
 				state.Lock()
 				defer state.Unlock()
@@ -343,10 +369,10 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 				return
 			}
 			state.Lock()
-			running := state.Running
+			running := state.Running || prerequisites.status().Installing
 			state.Unlock()
 			if running {
-				http.Error(w, "Wait for startup to finish before closing.", 409)
+				http.Error(w, "Wait for startup or installation to finish before closing.", 409)
 				return
 			}
 			select {
