@@ -195,9 +195,15 @@ artifacts together. Test Windows on a Windows host before publishing.
 
 After the release commit is on the default branch, create an annotated version
 tag and publish the two files under `sandbox-launcher/assets/` together with
-`LICENSE` and `THIRD-PARTY-NOTICES.txt`. Include the tested operating systems and
-checksums in the release notes. Verify that the uploaded downloads match the
-local artifacts and mark the release as the latest stable release.
+`LICENSE` and `THIRD-PARTY-NOTICES.txt`. Keep the GitHub release description short:
+a brief summary, download names, the versioned README link and unsigned/notarized
+status, a link to the release's dated section in `CHANGES.md`, and license/notice
+links. Put detailed changes, tested operating systems, validation results, testing
+limitations, SHA-256 checksums, and the comparison link in `CHANGES.md` instead.
+Use a version-and-date heading and a stable version anchor for each entry. For
+existing tags that predate `CHANGES.md`, link to the documentation commit containing
+that entry; never move a published tag to add the file. Verify that uploaded
+downloads match local artifacts and mark the release as the latest stable release.
 
 ## License and dependency notices
 
