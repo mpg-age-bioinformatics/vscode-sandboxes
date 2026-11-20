@@ -205,6 +205,11 @@ limitations, SHA-256 checksums, and the comparison link in `CHANGES.md` instead.
 Also state missing Windows installation/end-to-end testing directly on the
 release page whenever those checks have not been completed; do not hide that
 limitation behind the detailed-changes link.
+Include a short **macOS: Open an unsigned sandbox app** note, linking directly to
+`README.md#open-an-unsigned-sandbox-app` at that release's full Git commit SHA
+(`https://github.com/mpg-age-bioinformatics/vscode-sandboxes/blob/<release-commit>/README.md#open-an-unsigned-sandbox-app`).
+Resolve the commit from the release tag with `git rev-parse <tag>^{}`; do not use
+`main` or a newer README for an older release's installation instructions.
 Use a version-and-date heading and a stable version anchor for each entry. For
 existing tags that predate `CHANGES.md`, link to the documentation commit containing
 that entry; never move a published tag to add the file. Verify that uploaded
