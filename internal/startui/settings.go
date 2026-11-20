@@ -25,6 +25,9 @@ func directConnection(s Selection) Selection {
 	s.ConfigFile, s.Model = "", ""
 	s.ConfigOverrides = false
 	s.BaseURL, s.Token = strings.TrimSpace(s.BaseURL), strings.TrimSpace(s.Token)
+	if s.PrivateAgent == "" {
+		s.PrivateAgent = "continue"
+	}
 	s.Endpoint = "default"
 	if s.BaseURL != "" || s.Token != "" {
 		s.Endpoint = "private"
@@ -49,6 +52,9 @@ func validateSettings(s Selection) error {
 	}
 	if s.Agent != "both" && s.Agent != "codex" && s.Agent != "claude" {
 		return errors.New("Invalid agent configuration.")
+	}
+	if s.PrivateAgent != "" && s.PrivateAgent != "continue" && s.PrivateAgent != "codex" {
+		return errors.New("Choose Codex or Continue for the private endpoint.")
 	}
 	if s.Network != "none" && s.Network != "restricted" && s.Network != "open" {
 		return errors.New("Choose an internet setting.")
@@ -409,6 +415,9 @@ func HandleHelper() bool {
 	return true
 }
 func applyStartup(name, agent string, s Selection, log io.Writer) error {
+	if s.PrivateAgent != "" && s.PrivateAgent != "continue" && s.PrivateAgent != "codex" {
+		return errors.New("Choose Codex or Continue for the private endpoint.")
+	}
 	var networkErr error
 	var endpointHost string
 	s, endpointHost, networkErr = withPrivateEndpointAccess(s)
@@ -418,10 +427,18 @@ func applyStartup(name, agent string, s Selection, log io.Writer) error {
 	if endpointHost != "" {
 		fmt.Fprintln(log, privateEndpointNotice(endpointHost))
 	}
+	var codexPrivateData []byte
+	var codexPrivateModel string
 	if s.Endpoint == "private" {
 		data, err := privateContinueConfig(context.Background(), s)
 		if err != nil {
 			return err
+		}
+		if s.PrivateAgent == "codex" {
+			codexPrivateData, codexPrivateModel, err = privateCodexConfig(s, data)
+			if err != nil {
+				return err
+			}
 		}
 		script := `set -eu
 umask 077
@@ -444,7 +461,7 @@ mv .sandbox-config.tmp config.yaml`
 			Models []json.RawMessage `json:"models"`
 		}
 		_ = json.Unmarshal(data, &configured)
-		fmt.Fprintf(log, "Continue configured with %d private models inside this sandbox. Codex uses OpenAI.\n", len(configured.Models))
+		fmt.Fprintf(log, "Continue configured with %d private models inside this sandbox.\n", len(configured.Models))
 	} else {
 		script := `set -eu
 if [ -e "$HOME/.continue/.sandbox-managed" ]; then
@@ -460,8 +477,8 @@ fi`
 		}
 	}
 	if agent == "codex" || agent == "both" {
-		var data []byte
-		if s.ConfigFile != "" {
+		data := codexPrivateData
+		if len(data) == 0 && s.ConfigFile != "" {
 			codexSelection := s
 			codexSelection.Endpoint = "default"
 			codexSelection.Token = ""
@@ -473,7 +490,9 @@ fi`
 		}
 		// Back up the sandbox's original config once, and restore it on default mode.
 		script := `set -eu
++umask 077
 +mkdir -p "$HOME/.codex"
++chmod 700 "$HOME/.codex"
 +cd "$HOME/.codex"
 +rm -f .sandbox-models.json
 +if [ "$1" = import ]; then
@@ -492,7 +511,7 @@ fi`
 +fi`
 		script = strings.ReplaceAll(script, "\n+", "\n")
 		mode := "default"
-		if s.ConfigFile != "" {
+		if len(codexPrivateData) > 0 || s.ConfigFile != "" {
 			mode = "import"
 		}
 		cmd := Command("sbx", "exec", "-i", name, "sh", "-c", script, "startup", mode, s.Endpoint)
@@ -503,7 +522,11 @@ fi`
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("Install Codex connection settings: %w", err)
 		}
-		fmt.Fprintln(log, "Codex connection: default OpenAI")
+		if len(codexPrivateData) > 0 {
+			fmt.Fprintf(log, "Codex connection: private endpoint (Responses API), model %s.\n", codexPrivateModel)
+		} else {
+			fmt.Fprintln(log, "Codex connection: default OpenAI")
+		}
 	}
 	return applyNetwork(name, s, log)
 }

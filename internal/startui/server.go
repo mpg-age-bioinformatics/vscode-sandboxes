@@ -48,6 +48,7 @@ type Selection struct {
 	SiteLists       map[string]string `json:"siteLists,omitempty"`
 	EndpointSites   map[string]string `json:"endpointSites,omitempty"`
 	Endpoint        string            `json:"endpoint"`
+	PrivateAgent    string            `json:"privateAgent,omitempty"`
 	ConfigFile      string            `json:"configFile"`
 	ConfigOverrides bool              `json:"configOverrides,omitempty"`
 	BaseURL         string            `json:"baseURL"`

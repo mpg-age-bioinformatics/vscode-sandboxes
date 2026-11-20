@@ -56,3 +56,26 @@ func TestDirectConnectionIgnoresLegacyFilesAndModels(t *testing.T) {
 		}
 	}
 }
+
+func TestPrivateAgentChoiceSurvivesTemporaryManifest(t *testing.T) {
+	isolatedSettings(t)
+	for _, choice := range []string{"continue", "codex"} {
+		s := selection()
+		s.BaseURL, s.Token, s.PrivateAgent = "https://private.example/v1", "sandbox-only-key", choice
+		s = directConnection(s)
+		env, cleanup, err := PrepareEnvironment(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var manifest Selection
+		path := strings.TrimPrefix(env[1], "VSCODE_SANDBOX_STARTUP_SELECTION=")
+		err = readJSON(path, &manifest)
+		cleanup()
+		if err != nil || manifest.PrivateAgent != choice {
+			t.Fatal("private endpoint agent choice was lost", choice, err)
+		}
+		if manifest.ConfigFile != "" {
+			t.Fatal("created a persistent Codex connection file")
+		}
+	}
+}

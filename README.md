@@ -136,9 +136,11 @@ This uses Docker's hostname-based enforcement and inherits its documented
 
 The **Private endpoint (optional)** card shows the endpoint URL and separate
 sandbox API key side by side. Leave both blank for the default OpenAI connection
-in Codex. Enter both to use a private endpoint in Continue; Codex remains available
-for OpenAI with its own sandbox sign-in. There is no connection dropdown, model
-picker, or connection-file workflow in startup.
+in Codex. Enter both, then choose **Continue** or **Codex** in the second row.
+Continue is configured with the private endpoint in either case. **Continue** is
+the default and leaves Codex using OpenAI with its own sandbox sign-in. Choosing
+**Codex** also configures Codex with the private endpoint and the same sandbox API
+key. There is no model picker or connection-file workflow in startup.
 
 Private startup fetches `/models` with the supplied sandbox API key and writes the
 available IDs and routing aliases into `~/.continue/config.yaml` inside the sandbox.
@@ -147,6 +149,15 @@ provider, chat/edit/apply roles, and `/chat/completions`. An empty list or disco
 failure stops startup. No reusable configuration file or cached Codex TOML is
 created on the host. Existing sandbox Continue settings are backed up and restored
 when starting with both private fields blank.
+
+When **Codex** is selected, startup also writes the private provider, endpoint,
+authentication key, and first discovered model into the sandbox's
+`~/.codex/config.toml`. This uses the Responses API, so the endpoint must support
+`/responses` as well as `/models`; Continue uses `/chat/completions`. The sorted
+model list used for Continue supplies Codex's initial model. Codex's original
+configuration is backed up once and restored when switching back to Continue or
+clearing the private endpoint fields. Host Codex settings and authentication are
+not changed.
 
 The distributed launcher installs Continue **2.0.0** inside the Linux sandbox
 before VS Code opens, with enabled tools defaulting to **Automatic**, including
@@ -191,7 +202,8 @@ govern subsequent agent requests inside the sandbox.
 
 The private API key is required whenever a private URL is entered. It is readable
 by agents inside the sandbox and travels through a private temporary startup
-manifest and the sandbox's own Continue configuration. It is never saved in
+manifest and the sandbox's own Continue configuration (and Codex configuration
+when Codex is selected). It is never saved in
 launcher preferences, project files, or host Continue settings. URL query
 parameters are stripped except a validated `api-version` value. Host sign-in files
 and host environment credentials are not imported.
@@ -528,7 +540,8 @@ The command-line equivalents, run from the project root, are:
 Both agents are installed in the sandbox and Python/R containers. Run `codex` or
 `claude` in a VS Code terminal, or open the corresponding extension. Each agent
 has its own sign-in and settings. Private endpoint settings are loaded into
-Continue, while Codex uses OpenAI.
+Continue. Codex uses OpenAI by default; choosing Codex in the private endpoint
+card configures both Continue and Codex with that private endpoint.
 
 ### Working in the sandbox
 
