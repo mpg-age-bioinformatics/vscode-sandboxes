@@ -77,6 +77,13 @@ its path or click **Browse…** to choose or create a folder. Editing the field 
 not open the picker. Then choose the sandbox type and Python/R version for a new
 project. Changing types keeps your selected folder.
 
+The screenshots below show the macOS launcher in v1.2.0, using example paths
+and empty credential fields.
+
+**Local setup:** choose the project, environment and internet policy.
+
+![Local tab with the project folder, Python version and internet controls](docs/screenshots/local-setup.jpg)
+
 When the folder already contains a sandbox project, the launcher restores its
 language/version and offers **Restart sandbox**. It runs the existing project
 launcher without cloning skills or regenerating setup files. Successfully
@@ -149,6 +156,8 @@ Continue is configured with the private endpoint in either case. **Continue** is
 the default and leaves Codex using OpenAI with its own sandbox sign-in. Choosing
 **Codex** also configures Codex with the private endpoint and the same sandbox API
 key. There is no model picker or connection-file workflow in startup.
+
+![Private endpoint URL and sandbox API key fields, agent selection, and startup activity export](docs/screenshots/private-endpoint-and-activity.jpg)
 
 Private startup fetches `/models` with the supplied sandbox API key and writes the
 available IDs and routing aliases into `~/.continue/config.yaml` inside the sandbox.
@@ -247,6 +256,11 @@ compute node through your existing login-node SSH alias and an `srun` step insid
 the allocation. Compute-node hostnames are display labels only: the launcher never
 connects to a compute-node address or its SSH daemon. The container SSH endpoint
 listens on loopback and its protocol stream travels through Slurm.
+
+**Start a new Remote sandbox:** select the image, language version, architecture
+and project/data folders.
+
+![Remote Start a new sandbox tab showing image selection, cache storage, project folder and read-only additional folders](docs/screenshots/remote-new-sandbox.jpg)
 
 Choose an **Environment / image source**:
 
@@ -431,6 +445,12 @@ In **Start a new sandbox**, controls for the current allocation appear only whil
 one is active. **Start another sandbox** leaves the current allocation running and unlocks the form for
 another project. Unrelated Slurm jobs are excluded. Older jobs without launcher
 profile metadata cannot be attached through this inventory.
+
+**Connect to running sandboxes:** enter your SSH login, list allocations, then
+attach to or stop the selected sandbox. The screenshot shows the initial view
+before a server is selected.
+
+![Remote Connect to running sandboxes tab with the allocation picker, List running sandboxes, Attach, Stop allocation and activity export](docs/screenshots/remote-connect.jpg)
 
 Your site must permit noninteractive login-node SSH, Slurm jobs, additional `srun`
 steps in an existing allocation, and a rootless loopback SSH service in Apptainer.
