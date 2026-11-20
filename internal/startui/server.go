@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	licensing "github.com/mpg-age-bioinformatics/vscode-sandboxes"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -22,7 +24,7 @@ import (
 	"time"
 )
 
-//go:embed window.html site-presets.js
+//go:embed window.html site-presets.js remote.js
 var content embed.FS
 
 type Config struct {
@@ -124,6 +126,8 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 	path := "/" + hex.EncodeToString(key) + "/"
 	state := &logState{answer: make(chan bool, 1)}
 	prerequisites := &prerequisiteSetup{}
+	remote := newRemoteController()
+	defer remote.close()
 	var folderPicker sync.Mutex
 	closed := make(chan struct{}, 1)
 	mux := http.NewServeMux()
@@ -139,11 +143,15 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 			http.Error(w, "invalid origin", 403)
 			return
 		}
-		switch strings.TrimPrefix(r.URL.Path, path) {
+		route := strings.TrimPrefix(r.URL.Path, path)
+		if strings.HasPrefix(route, "remote/") || route == "remote.js" {
+			remote.serve(route, w, r, state, prerequisites)
+			return
+		}
+		switch route {
 		case "":
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			data, _ := content.ReadFile("window.html")
-			_, _ = w.Write(data)
+			_, _ = w.Write(startupPage())
 		case "site-presets.js":
 			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 			data, _ := content.ReadFile("site-presets.js")
@@ -173,12 +181,26 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 				return
 			}
 			state.Lock()
-			if state.Running {
+			if state.Running || remote.busy() {
 				state.Unlock()
-				http.Error(w, "Wait for sandbox startup to finish.", 409)
+				http.Error(w, "Wait for startup to finish.", 409)
 				return
 			}
-			err := prerequisites.start()
+			var request struct {
+				Components []string `json:"components"`
+			}
+			if r.ContentLength != 0 {
+				if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&request); err != nil {
+					state.Unlock()
+					http.Error(w, "Invalid component selection", 400)
+					return
+				}
+			}
+			components := request.Components
+			if len(components) == 0 {
+				components = []string{"docker", "vscode"}
+			}
+			err := prerequisites.startComponents(components)
 			state.Unlock()
 			if err != nil {
 				http.Error(w, err.Error(), 409)
@@ -290,7 +312,7 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 				http.Error(w, "Complete setup: Docker Sandboxes and Visual Studio Code must both be detected before startup.", 409)
 				return
 			}
-			if state.Running {
+			if state.Running || remote.busy() {
 				state.Unlock()
 				http.Error(w, "already starting", 409)
 				return
@@ -370,7 +392,7 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 				return
 			}
 			state.Lock()
-			running := state.Running || prerequisites.status().Installing
+			running := state.Running || remote.busy() || prerequisites.status().Installing
 			state.Unlock()
 			if running {
 				http.Error(w, "Wait for startup or installation to finish before closing.", 409)
@@ -471,3 +493,8 @@ $p = Start-Process -FilePath $edge -ArgumentList @('--app=' + $env:SANDBOX_WINDO
 $p.WaitForExit()
 Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue
 `
+
+func startupPage() []byte {
+	data, _ := content.ReadFile("window.html")
+	return []byte(strings.ReplaceAll(string(data), "__DISCLAIMER_TEXT__", html.EscapeString(licensing.Disclaimer)))
+}

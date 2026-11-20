@@ -20,8 +20,9 @@ on run argv
       end tell
       set position of item "VS Code Sandboxes.app" to {180, 230}
       set position of item "Applications" to {540, 230}
-      set position of item "LICENSE" to {210, 450}
-      set position of item "THIRD-PARTY-NOTICES.txt" to {510, 450}
+      set position of item "LICENSE" to {120, 450}
+      set position of item "DISCLAIMER.txt" to {340, 450}
+      set position of item "THIRD-PARTY-NOTICES.txt" to {580, 450}
       update without registering applications
       delay 2
       close

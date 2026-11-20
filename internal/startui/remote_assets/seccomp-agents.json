@@ -1,0 +1,81 @@
+{
+  "comment": "OCI-native seccomp DENYLIST for the AI CLI agent Apptainer sandbox. Apply with: apptainer ... --security seccomp:seccomp-agents.json . THREADING NOTE: this profile deliberately does NOT filter clone/clone3. Reason: this Apptainer build does not honor a per-rule errnoRet of ENOSYS(38) for clone3 -- it returns EPERM instead, which defeats glibc's clone3->clone fallback and breaks pthread_create ('runtime/cgo: pthread_create failed: Operation not permitted'). Since clone3 cannot be funneled to a filterable clone() here, seccomp cannot block clone-based USER namespace creation without also breaking threads, so we leave clone/clone3 alone. unshare()/setns() ARE fully blocked (threading never uses them), which closes the unshare-based namespace path. defaultAction is ALLOW: with all capabilities dropped (CapBnd=0) and NoNewPrivs=1, most blocked calls would fail anyway; the rules make denial explicit and remove kernel-attack and escape primitives. RESIDUAL: a nested user namespace is still creatable via clone()/clone3() (see SECURITY NOTE at end). ARCH: SCMP_ARCH_X86_64 and SCMP_ARCH_AARCH64, the native architectures of the x86_64 and aarch64 images; names of syscalls absent on an architecture (e.g. iopl/ioperm on aarch64, clock_settime64 on both) are ignored there. Add SCMP_ARCH_X86/SCMP_ARCH_X32/SCMP_ARCH_ARM for compat-ABI coverage and re-verify load.",
+  "defaultAction": "SCMP_ACT_ALLOW",
+  "architectures": [
+    "SCMP_ARCH_X86_64",
+    "SCMP_ARCH_AARCH64"
+  ],
+  "syscalls": [
+    {
+      "names": [ "unshare", "setns" ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Block the unshare()/setns() paths for creating or joining namespaces. Threading/fork never use these, so this is safe. NOTE: clone()/clone3() are intentionally not filtered (see header) and remain a userns path."
+    },
+    {
+      "names": [
+        "mount", "umount2", "pivot_root", "move_mount", "open_tree",
+        "fsopen", "fsconfig", "fsmount", "fspick", "mount_setattr", "chroot"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Block all mount manipulation (classic + new mount API) and chroot, so the read-only rootfs / bind layout cannot be altered."
+    },
+    {
+      "names": [ "ptrace", "process_vm_readv", "process_vm_writev", "pidfd_getfd", "kcmp" ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Block cross-process inspection/injection and fd theft. NOTE: also disables gdb/strace inside the sandbox -- remove ptrace from this list if you need interactive debugging."
+    },
+    {
+      "names": [ "bpf", "perf_event_open", "userfaultfd", "io_uring_setup", "io_uring_enter", "io_uring_register" ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "High-value kernel attack surface used in many LPE/escape exploits. io_uring: libuv (Node) probes io_uring_setup at startup and falls back to its threadpool on failure, so blocking is safe; remove the three io_uring_* names if a workload requires it."
+    },
+    {
+      "names": [ "keyctl", "add_key", "request_key" ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Block the kernel keyring (credential/keyring abuse + past exploit surface)."
+    },
+    {
+      "names": [ "init_module", "finit_module", "delete_module", "query_module", "kexec_load", "kexec_file_load" ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Block kernel module loading/unloading and kexec (requires CAP_SYS_MODULE / CAP_SYS_BOOT; loading attacker-controlled module code into the kernel is a direct escape primitive)."
+    },
+    {
+      "names": [
+        "reboot", "swapon", "swapoff", "settimeofday", "stime",
+        "clock_settime", "clock_settime64", "acct", "quotactl", "vhangup",
+        "sethostname", "setdomainname", "ioperm", "iopl", "nfsservctl", "vmsplice"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Host-state-changing / privileged admin syscalls: power, swap, clock SET (adjtimex/clock_adjtime intentionally NOT blocked -- they are allowed so the sandbox can still read/discipline time), accounting, quotas, UTS hostname/domain (UTS ns is shared with the host here), x86 I/O-port access, NFS daemon control, and vmsplice (page-cache exploit surface)."
+    },
+    {
+      "names": [ "fanotify_init", "lookup_dcookie", "uselib", "ustat" ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "fanotify_init needs CAP_SYS_ADMIN (filesystem-wide monitoring); the rest are obsolete/rarely-legitimate calls kept around only as attack surface."
+    },
+    {
+      "names": [ "open_by_handle_at", "name_to_handle_at" ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Block file-handle resolution -- a known container-escape primitive (Shocker-style access to inodes outside the mount tree)."
+    },
+    {
+      "names": [ "socket" ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 22,
+      "comment": "Block AF_NETLINK(16)/NETLINK_AUDIT(9) sockets so an injected agent cannot forge/flood kernel audit records (the equivalent of gating CAP_AUDIT_WRITE). Returns EINVAL(22). Both arg conditions are ANDed, so NETLINK_ROUTE (used by getaddrinfo) and all other sockets are unaffected.",
+      "args": [
+        { "index": 0, "value": 16, "valueTwo": 0, "op": "SCMP_CMP_EQ" },
+        { "index": 2, "value": 9, "valueTwo": 0, "op": "SCMP_CMP_EQ" }
+      ]
+    }
+  ]
+}

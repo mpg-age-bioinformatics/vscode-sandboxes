@@ -1,0 +1,39 @@
+Bootstrap: docker
+From: node:22-bookworm
+
+# Build from the repository root so these paths resolve.
+%files
+    internal/startui/remote_assets/seccomp-agents.json /usr/local/share/vscode-sandboxes/security/seccomp-agents.json
+    internal/startui/remote_assets/verify-security.py /usr/local/share/vscode-sandboxes/security/verify-security.py
+    internal/startui/remote_assets/slurm-unavailable.sh /usr/local/share/vscode-sandboxes/security/slurm-unavailable.sh
+    APPTAINER.md /usr/local/share/vscode-sandboxes/security/APPTAINER.md
+    THIRD-PARTY-NOTICES.txt /usr/local/share/vscode-sandboxes/security/THIRD-PARTY-NOTICES.txt
+
+%post
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends bash bash-completion openssh-server python3 python3-venv python3-pip python3-ipykernel r-base r-cran-irkernel curl ca-certificates git procps tar gzip bzip2 xz-utils
+    mkdir -p /run/sshd /workspace /data /run/vscode-launcher
+    chmod 755 /run/sshd
+    chmod 755 /usr/local/share/vscode-sandboxes/security/slurm-unavailable.sh
+    for cmd in sacct sacctmgr salloc sattach sbatch sbcast scancel scontrol scrontab sdiag seff sinfo sprio squeue sreport srun sshare sstat strigger sview smap sjstat sh5util scrun; do
+        ln -sf /usr/local/share/vscode-sandboxes/security/slurm-unavailable.sh "/usr/local/bin/$cmd"
+    done
+    npm install -g --no-audit --no-fund @openai/codex@0.163.0 @anthropic-ai/claude-code@2.1.328
+    Rscript -e 'IRkernel::installspec(user=FALSE)'
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+
+%environment
+    export SHELL=/bin/bash
+    export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+
+%test
+    /usr/sbin/sshd -V 2>&1 || true
+    python3 --version
+    R --version
+    codex --version
+
+%labels
+    Description Remote VS Code workspace for Slurm and Apptainer
+    SecurityPolicy mpcdf-strict-v1-runtime-flags-required

@@ -4,6 +4,16 @@ The primary application lives in `sandbox-launcher/` and includes Python, R, and
 general bioinformatics in one startup UI. Per-language source directories remain
 as worker and compatibility-build inputs. Shared setup payloads live under `internal/`.
 
+## Reporting an issue
+
+Use **Report an issue** at the lower right of the launcher, or open
+[GitHub issues](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/issues).
+Choose **Bug report** or **Feature request** and follow the form's guidance.
+For bugs, include the launcher version, operating system/architecture, Local or
+Remote workflow, reproduction steps, expected/actual behavior, and relevant
+activity output. Include tool/cluster versions when known. Reports are public:
+review logs and screenshots and remove credentials or sensitive information.
+
 ## Repository convention
 
 Each sandbox should contain everything needed to reproduce its user-facing
@@ -197,7 +207,7 @@ artifacts together. Test Windows on a Windows host before publishing.
 
 After the release commit is on the default branch, create an annotated version
 tag and publish the two files under `sandbox-launcher/assets/` together with
-`LICENSE` and `THIRD-PARTY-NOTICES.txt`. Keep the GitHub release description short:
+`LICENSE`, `THIRD-PARTY-NOTICES.txt` and `DISCLAIMER.txt`. Keep the GitHub release description short:
 a brief summary, download names, the versioned README link and unsigned/notarized
 status, a link to the release's dated section in `CHANGES.md`, and license/notice
 links. Put detailed changes, tested operating systems, validation results, testing
@@ -208,8 +218,18 @@ limitation behind the detailed-changes link.
 Include a short **macOS: Open an unsigned sandbox app** note, linking directly to
 `README.md#open-an-unsigned-sandbox-app` at that release's full Git commit SHA
 (`https://github.com/mpg-age-bioinformatics/vscode-sandboxes/blob/<release-commit>/README.md#open-an-unsigned-sandbox-app`).
+Include a short **Use at your own risk** note linking to
+`README.md#user-responsibility-and-liability` at that same release commit, and
+link the attached `DISCLAIMER.txt`. Do not describe the disclaimer as absolute
+immunity or remove its applicable-law qualification. Keep the MIT license intact.
 Resolve the commit from the release tag with `git rev-parse <tag>^{}`; do not use
 `main` or a newer README for an older release's installation instructions.
+Maintain the **Release commits** table in `CHANGES.md` for every published
+release. Resolve the full commit SHA with `git rev-parse '<tag>^{commit}'` and
+link to `https://github.com/mpg-age-bioinformatics/vscode-sandboxes/commit/<sha>`.
+Record this mapping in a documentation follow-up commit after the release commit
+and tag exist: a commit cannot contain its own final SHA. Preserve published
+tags and their release commits when updating the table.
 Use a version-and-date heading and a stable version anchor for each entry. For
 existing tags that predate `CHANGES.md`, link to the documentation commit containing
 that entry; never move a published tag to add the file. Verify that uploaded
@@ -217,18 +237,18 @@ downloads match local artifacts and mark the release as the latest stable releas
 
 ## License and dependency notices
 
-Keep `LICENSE` and `THIRD-PARTY-NOTICES.txt` with every release, including releases
-containing only one platform. Upload both documents as release assets and link
+Keep `LICENSE`, `THIRD-PARTY-NOTICES.txt` and `DISCLAIMER.txt` with every release, including releases
+containing only one platform. Upload all three documents as release assets and link
 the notices in the release notes. Preserve existing notices when modifying or
 redistributing third-party components.
 
-macOS build scripts include both documents in the disk image and application.
+macOS build scripts include all three documents in the disk image and application.
 The unified DMG builder renders its installation background from
 `internal/desktop/DMGBackground.swift` at 1x and 2x resolution and saves the
 Finder window layout with `sandbox-launcher/scripts/layout-dmg.applescript`
 before compressing the final image. Its hidden background and `.DS_Store` are
 packaging metadata and must survive conversion to the read-only image.
-Windows launchers embed them and expose them with `--licenses`; generated Windows
+Windows launchers embed all three and expose them with `--licenses`; generated Windows
 project runners retain the embedded documents. Generated macOS project runners
 also carry the documents in their Resources directories.
 
@@ -401,3 +421,103 @@ Run `node scripts/test-prerequisites-ui.js` and `go test ./internal/startui` for
 missing-tool combinations, project-launcher gating, install/recheck transitions,
 removal detection, verified downloads, offline cache reuse, checksum rejection,
 installer serialization/failures, and preservation of existing installs.
+
+### Remote HPC launcher
+
+Run `go test ./internal/startui -run TestRemote` and
+`node scripts/test-remote-ui.js`. Scheduler fixtures exercise submission arguments,
+compute-node mounts, status, interrupted-submission recovery and identity-checked
+cancellation without contacting a cluster. The launcher test verifies the
+container endpoint before invoking a fake VS Code CLI, reconnects without another
+submission, and checks SSH settings and cancellation persistence.
+
+For site validation, use an approved SIF and disposable persistent project. Verify
+queue wait, a real Remote-SSH connection through the login node, Python/R/notebook
+execution, Codex sign-in and execution inside the container, reconnect, time-limit
+expiry, and cancellation. Record the cluster/site policy and results; fixture
+passes do not establish that an HPC permits the service.
+
+Remote image source tests also verify shared Local preset assets, self-contained
+Dockerfile uploads, sandbox-only local build orchestration, target architecture,
+image upload staging, compute-node conversion, project preservation and version
+conflicts. The UI tests exercise all source choices and conditional tool setup.
+For live validation, additionally test an amd64 image build on Apple silicon,
+archive transfer, compute-node SIF conversion and first-time Python/R package
+initialization. Retain resulting image locks and recipes with the project.
+
+To opt into an actual local image build (without SSH or Slurm), run:
+
+```bash
+VSCODE_REMOTE_LIVE_BUILD=1 go test ./internal/startui -run '^TestRemoteLiveImageBuild$' -v -timeout 30m
+VSCODE_REMOTE_LIVE_BUILD=1 VSCODE_REMOTE_LIVE_PRESET=r go test ./internal/startui -run '^TestRemoteLiveImageBuild$' -v -timeout 30m
+```
+
+These default to amd64 Python 3.13 or R 4.5. `VSCODE_REMOTE_LIVE_ARCH` and
+`VSCODE_REMOTE_LIVE_VERSION` override those choices. The test retains the reusable
+Dockerfile and archive in the application cache and removes its temporary sandbox.
+
+The R preset's Dockerfile now repairs only affected libraries in the R runtime
+dependency graph for 16 KiB page compatibility. `TestRemoteRAlignmentScopeAndAtomicFailure`
+covers ELF selection, compatible/native skips, dependency scope and atomic failure
+preservation. The repair verifies executable-section contents/addresses, SONAME
+and dependency names before replacement. New R image builds must execute
+`smoke-r.R` successfully (ICU collation, CSV round trip, PDF and Cairo PNG); image
+installation alone is not sufficient validation.
+
+Remote input regressions cover tilde expansion, comma/whitespace normalization,
+multiple quoted folder paths, named module loading in login/status/compute shells,
+legacy preference migration, and default Slurm accounting even when
+`SBATCH_ACCOUNT` was set. These changes do not require rebuilding the image cache.
+
+To test against an HPC you are authorized to use (real upload and Slurm allocation):
+
+```bash
+VSCODE_REMOTE_LIVE_HPC=your-ssh-host go test ./internal/startui -run '^TestRemoteLiveHPC$' -v -timeout 30m
+VSCODE_REMOTE_LIVE_HPC=your-ssh-host VSCODE_REMOTE_LIVE_PRESET=r go test ./internal/startui -run '^TestRemoteLiveHPC$' -v -timeout 30m
+```
+
+This uses the default SSH identity, partition `cluster`, one CPU and 8 GiB, with
+an abbreviated 20-minute allocation. It creates separate smoke-test projects under
+`~/sandboxes`, verifies additional-folder mounts, container SSH, runtime setup,
+and a fresh SSH reconnect, then cancels only its own allocation. Project files,
+logs and uploaded images remain for inspection; per-allocation local SSH keys and
+aliases are removed. It does not launch VS Code or authenticate a coding agent.
+
+For a startup-only retry against a SIF created by a previous live test, set
+`VSCODE_REMOTE_LIVE_STAGE` to that test's remote upload directory and
+`VSCODE_REMOTE_LIVE_CACHE` to its local image cache directory. This uploads the
+current project template into that test stage and creates a fresh project/job,
+without uploading or converting the image again. Use only a previous stage you
+own, with a recipe matching the selected preset/version/architecture.
+
+`VSCODE_REMOTE_LIVE_PROJECT` can select the previous smoke-test project to verify
+a startup retry with its existing library and dependency locks. The live test also
+checks the effective container identity environment; the local OpenSSH-server
+regression validates effective `SetEnv` configuration with `sshd -T`.
+
+Remote transport must never SSH or forward TCP to a compute-node address.
+`ProxyCommand` authenticates to the login node and runs a token/job-checked
+`srun --jobid` relay to the container's loopback endpoint. Slurm unbuffered mode
+uses a PTY, which the Python relay switches to raw mode before sending bytes.
+Test all byte values, concurrent connections on a one-CPU allocation, modern
+`--overlap` and older Slurm, and absence of direct-compute fallbacks.
+`VSCODE_REMOTE_LIVE_CLUSTER_TMP=1` exercises a site-defined temporary path with
+spaces. Assert that temporary storage stays under that path, that container SSH
+inherits TMPDIR, and that R can use the space-free container alias.
+
+Server image metadata is implemented by `remote_assets/catalog.py`, invoked over
+login-node SSH. Tests cover incomplete/missing images, recipe lookup, image identity,
+project-only transfer on cache hit, concurrent conversion, metadata ownership,
+allocation discovery, public-key registration and identity-checked stop. Keep
+metadata size bounded and atomic; never infer running jobs solely from stale files.
+Image recipes/builder inputs determine the local cache key; project instructions
+and runtime initialization are regenerated separately.
+
+For a live cache test using a previously validated SIF on the same HPC filesystem,
+set `VSCODE_REMOTE_LIVE_CACHE_SIF` to its remote path and
+`VSCODE_REMOTE_LIVE_CACHE` to the matching local cache directory. The test checks
+that the recipe still matches, registers the existing SIF with a hard link, and
+exercises the production cache lookup/project transfer. `VSCODE_REMOTE_LIVE_CACHED=1`
+selects the image explicitly from the catalog instead of using automatic recipe
+lookup. It also discovers the new job, registers a different laptop key, verifies
+reconnect/concurrent/binary transport, and stops the selected allocation.

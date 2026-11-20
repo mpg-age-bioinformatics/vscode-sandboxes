@@ -35,7 +35,7 @@ mkdir -p "$staging_dir"
 cp -R "$app_path" "$staging_dir/Bioinformatics Sandbox.app"
 cp -R "$bundle_path" "$staging_dir/Bioinformatics Sandbox.app/Contents/Resources/Setup"
 cp "$repository_root/internal/launcherbundle/bundles/common/assets/"* "$staging_dir/Bioinformatics Sandbox.app/Contents/Resources/Setup/assets/"
-for notice in LICENSE THIRD-PARTY-NOTICES.txt; do
+for notice in LICENSE THIRD-PARTY-NOTICES.txt DISCLAIMER.txt; do
   cp "$repository_root/$notice" "$staging_dir/$notice"
   cp "$repository_root/$notice" "$staging_dir/Bioinformatics Sandbox.app/Contents/Resources/$notice"
   cp "$repository_root/$notice" "$staging_dir/Bioinformatics Sandbox.app/Contents/Resources/Setup/$notice"

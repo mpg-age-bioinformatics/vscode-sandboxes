@@ -35,14 +35,14 @@ mkdir -p "$staging_dir"
 cp -R "$app_path" "$staging_dir/Python Sandbox.app"
 cp -R "$bundle_path" "$staging_dir/Python Sandbox.app/Contents/Resources/Setup"
 cp "$repository_root/internal/launcherbundle/bundles/common/assets/"* "$staging_dir/Python Sandbox.app/Contents/Resources/Setup/assets/"
-for notice in LICENSE THIRD-PARTY-NOTICES.txt; do
+for notice in LICENSE THIRD-PARTY-NOTICES.txt DISCLAIMER.txt; do
   cp "$repository_root/$notice" "$staging_dir/$notice"
   cp "$repository_root/$notice" "$staging_dir/Python Sandbox.app/Contents/Resources/$notice"
   cp "$repository_root/$notice" "$staging_dir/Python Sandbox.app/Contents/Resources/Setup/$notice"
 done
 runner_resources="$staging_dir/Python Sandbox.app/Contents/Resources/Setup/assets/Run Python Sandbox.app.template/Contents/Resources"
 mkdir -p "$runner_resources"
-cp "$repository_root/LICENSE" "$repository_root/THIRD-PARTY-NOTICES.txt" "$runner_resources/"
+cp "$repository_root/LICENSE" "$repository_root/THIRD-PARTY-NOTICES.txt" "$repository_root/DISCLAIMER.txt" "$runner_resources/"
 chmod 755 "$staging_dir/Python Sandbox.app/Contents/Resources/Setup/scripts/setup-project.sh" \
   "$staging_dir/Python Sandbox.app/Contents/Resources/Setup/assets/run-python-sandbox.sh" \
   "$staging_dir/Python Sandbox.app/Contents/Resources/Setup/assets/Run Python Sandbox.app.template/Contents/MacOS/run-python-sandbox"

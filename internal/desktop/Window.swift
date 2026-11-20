@@ -83,10 +83,15 @@ final class WindowDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, W
             return
         }
         if message.name == "exportActivity" {
-            guard let text = message.body as? String else { replyHandler(nil, "Invalid activity export"); return }
+            let payload = message.body as? [String: String]
+            guard let text = (message.body as? String) ?? payload?["text"] else { replyHandler(nil, "Invalid activity export"); return }
+            let proposedName = payload?["filename"] ?? "startup-activity.txt"
+            guard proposedName == "startup-activity.txt" || proposedName.range(of: #"^vscode-sandox\.[0-9]{8}\.[0-9]{6}\.log$"#, options: .regularExpression) != nil else {
+                replyHandler(nil, "Invalid activity filename"); return
+            }
             let panel = NSSavePanel()
-            panel.title = "Export startup activity"
-            panel.nameFieldStringValue = "startup-activity.txt"
+            panel.title = payload == nil ? "Export startup activity" : "Export Remote activity"
+            panel.nameFieldStringValue = proposedName
             panel.canCreateDirectories = true
             panel.beginSheetModal(for: window) { response in
                 guard response == .OK, let url = panel.url else { replyHandler("", nil); return }

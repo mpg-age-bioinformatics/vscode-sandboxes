@@ -215,6 +215,19 @@ func downloadPrerequisite(ctx context.Context, client *http.Client, artifact pre
 
 // Caller holds the startup state lock, so installation and startup cannot race.
 func (p *prerequisiteSetup) start() error {
+	return p.startComponents([]string{"docker", "vscode"})
+}
+
+func (p *prerequisiteSetup) startComponents(components []string) error {
+	if len(components) == 0 || len(components) > 2 {
+		return fmt.Errorf("Choose missing components to install")
+	}
+	for _, component := range components {
+		if component != "docker" && component != "vscode" {
+			return fmt.Errorf("Unknown prerequisite component")
+		}
+	}
+
 	p.Lock()
 	defer p.Unlock()
 	if p.installing {
@@ -229,7 +242,9 @@ func (p *prerequisiteSetup) start() error {
 		defer cancel()
 		install := p.install
 		if install == nil {
-			install = installMissingPrerequisites
+			install = func(ctx context.Context, log io.Writer) error {
+				return installPrerequisiteComponents(ctx, components, log)
+			}
 		}
 		err := install(ctx, p)
 		p.Lock()
@@ -243,6 +258,10 @@ func (p *prerequisiteSetup) start() error {
 }
 
 func installMissingPrerequisites(ctx context.Context, log io.Writer) error {
+	return installPrerequisiteComponents(ctx, []string{"docker", "vscode"}, log)
+}
+
+func installPrerequisiteComponents(ctx context.Context, components []string, log io.Writer) error {
 	cache, err := os.UserCacheDir()
 	if err != nil {
 		return err
@@ -257,7 +276,7 @@ func installMissingPrerequisites(ctx context.Context, log io.Writer) error {
 		}
 		return nil
 	}}
-	for _, component := range []string{"docker", "vscode"} {
+	for _, component := range components {
 		status := detectPrerequisites()
 		if (component == "docker" && status.Docker) || (component == "vscode" && status.VSCode) {
 			fmt.Fprintln(log, "Keeping existing", component, "installation.")
@@ -281,10 +300,13 @@ func installMissingPrerequisites(ctx context.Context, log io.Writer) error {
 		}
 		fmt.Fprintln(log, "Installed", component+".")
 	}
-	if !detectPrerequisites().Ready {
-		return fmt.Errorf("Installation finished but a required tool was not detected. Complete any installer prompts, then click Check again.")
+	status := detectPrerequisites()
+	for _, component := range components {
+		if (component == "docker" && !status.Docker) || (component == "vscode" && !status.VSCode) {
+			return fmt.Errorf("Installation finished but a requested tool was not detected. Complete any installer prompts, then click Check again.")
+		}
 	}
-	fmt.Fprintln(log, "Both tools are detected. Continue with your workspace settings.")
+	fmt.Fprintln(log, "Requested components are detected. Continue with your workspace settings.")
 	return nil
 }
 

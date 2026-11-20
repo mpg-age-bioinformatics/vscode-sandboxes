@@ -13,11 +13,11 @@ cleanup() {
 trap cleanup EXIT
 mkdir -p "$build_root/staging/.background"
 cp -R "$repository_root/sandbox-launcher/assets/VS Code Sandboxes.app" "$build_root/staging/"
-cp "$repository_root/LICENSE" "$repository_root/THIRD-PARTY-NOTICES.txt" "$build_root/staging/"
+cp "$repository_root/LICENSE" "$repository_root/THIRD-PARTY-NOTICES.txt" "$repository_root/DISCLAIMER.txt" "$build_root/staging/"
 ln -s /Applications "$build_root/staging/Applications"
 swift -module-cache-path "${TMPDIR:-/tmp}/vscode-sandbox-clang-cache" \
   "$repository_root/internal/desktop/DMGBackground.swift" "$build_root/staging/.background/installation.tiff"
-volume_name='VS Code - Docker Sandboxes'
+volume_name='VS Code - Sandboxes'
 read_write_dmg="$build_root/VS-Code-Sandboxes-rw.dmg"
 hdiutil create -quiet -volname "$volume_name" -srcfolder "$build_root/staging" -format UDRW "$read_write_dmg"
 attach_output="$(hdiutil attach -readwrite -noverify -noautoopen "$read_write_dmg")"

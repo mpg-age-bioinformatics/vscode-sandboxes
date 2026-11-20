@@ -71,7 +71,8 @@ if [[ ! -f "$notice_root/LICENSE" ]]; then
 fi
 install_if_absent_or_identical "$notice_root/LICENSE" code/.sandbox/VS-Code-Sandboxes-LICENSE.txt
 install_if_absent_or_identical "$notice_root/THIRD-PARTY-NOTICES.txt" code/.sandbox/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt
-setup_paths=(code/.sandbox/prepare-continue.py code/.sandbox/install-continue.js code/.sandbox/setup-continue.sh code/.sandbox/install-coding-agents.sh .vscode/settings.json .vscode/extensions.json .gitignore .gitattributes AGENTS.md .instructions.md code/.sandbox/run-bioinformatics-sandbox.sh code/.sandbox/VS-Code-Sandboxes-LICENSE.txt code/.sandbox/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt)
+install_if_absent_or_identical "$notice_root/DISCLAIMER.txt" code/.sandbox/VS-Code-Sandboxes-DISCLAIMER.txt
+setup_paths=(code/.sandbox/prepare-continue.py code/.sandbox/install-continue.js code/.sandbox/setup-continue.sh code/.sandbox/install-coding-agents.sh .vscode/settings.json .vscode/extensions.json .gitignore .gitattributes AGENTS.md .instructions.md code/.sandbox/run-bioinformatics-sandbox.sh code/.sandbox/VS-Code-Sandboxes-LICENSE.txt code/.sandbox/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt code/.sandbox/VS-Code-Sandboxes-DISCLAIMER.txt)
 if [[ -n "$project_runner_source" ]]; then
   [[ -f "$project_runner_source" ]] || { echo "Error: bundled Windows project runner is unavailable: $project_runner_source" >&2; exit 1; }
   [[ "$project_runner_agent" == "$agent" ]] || { echo "Error: bundled Windows project runner agent does not match the setup selection." >&2; exit 1; }
@@ -88,7 +89,7 @@ if [[ -n "$project_app_template" ]]; then
   install_if_absent_or_identical "$project_app_template/Contents/Info.plist" "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/Info.plist"
   install_if_absent_or_identical "$project_app_template/Contents/MacOS/run-bioinformatics-sandbox" "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/MacOS/run-bioinformatics-sandbox"
   install_if_absent_or_identical "$project_app_icon" "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/Resources/BioinformaticsSandbox.icns"
-  for notice in LICENSE THIRD-PARTY-NOTICES.txt; do
+  for notice in LICENSE THIRD-PARTY-NOTICES.txt DISCLAIMER.txt; do
     install_if_absent_or_identical "$notice_root/$notice" "code/.sandbox/Run Bioinformatics Sandbox.app/Contents/Resources/$notice"
   done
   for binary in "Sandbox Desktop" "Sandbox Window"; do

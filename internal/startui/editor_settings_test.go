@@ -71,3 +71,45 @@ func TestContinuePlacementDoesNotOverwriteInvalidSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoteAutomaticExtensionsPreserveUserChoices(t *testing.T) {
+	original := []byte(`{
+ // Keep this comment and custom extensions.
+ "editor.fontSize": 19,
+ "remote.SSH.defaultExtensions": ["user.extension@1.2.3", "continue.continue@2.0.0"],
+ "remote.extensionKind": {"Continue.continue":["ui"]},
+ }`)
+	updated, err := remoteEditorSettings(original, RemoteProfile{ImageSource: "python"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(updated, []byte("Keep this comment")) {
+		t.Fatal("lost JSONC comment")
+	}
+	value, err := hujson.Parse(updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value.Standardize()
+	var settings map[string]any
+	if err := json.Unmarshal(value.Pack(), &settings); err != nil {
+		t.Fatal(err)
+	}
+	extensions := settings["remote.SSH.defaultExtensions"].([]any)
+	found := map[string]int{}
+	for _, entry := range extensions {
+		found[entry.(string)]++
+	}
+	if found["Continue.continue"] != 1 || found["Continue.continue@2.0.0"] != 0 || found["user.extension@1.2.3"] != 1 || found["openai.chatgpt"] != 1 || settings["editor.fontSize"] != float64(19) {
+		t.Fatal(settings)
+	}
+	again, err := remoteEditorSettings(updated, RemoteProfile{ImageSource: "python"})
+	if err != nil || !bytes.Equal(updated, again) {
+		t.Fatal("defaults changed on reconnect", err)
+	}
+	for _, invalid := range []string{`{"remote.SSH.defaultExtensions":"bad"}`, `{"remote.SSH.defaultExtensions":null}`} {
+		if _, err := remoteEditorSettings([]byte(invalid), RemoteProfile{}); err == nil {
+			t.Fatal("overwrote invalid defaults", invalid)
+		}
+	}
+}

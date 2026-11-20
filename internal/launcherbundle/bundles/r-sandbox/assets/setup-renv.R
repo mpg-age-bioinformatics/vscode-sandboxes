@@ -41,5 +41,5 @@ local({
 })
 renv::snapshot(type = "all", prompt = FALSE)
 # Verify resolution in a fresh process, including after restoring a lockfile.
-status <- system2(file.path(R.home("bin"), "Rscript"), "code/.sandbox/verify-renv.R")
+status <- system2(file.path(R.home("bin"), "Rscript"), c("--vanilla", "code/.sandbox/verify-renv.R"))
 if (status != 0L) stop("Fresh-process project library verification failed")

@@ -58,6 +58,7 @@ run_case() {
   [[ -f "$project/skills/EMPTY_SKILLS_CLONE" ]]
   cmp "$repository_root/LICENSE" "$project/code/.sandbox/VS-Code-Sandboxes-LICENSE.txt"
   cmp "$repository_root/THIRD-PARTY-NOTICES.txt" "$project/code/.sandbox/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt"
+  cmp "$repository_root/DISCLAIMER.txt" "$project/code/.sandbox/VS-Code-Sandboxes-DISCLAIMER.txt"
   case "$slug" in
     python-sandbox)
       runner_name="Run Python Sandbox.exe"

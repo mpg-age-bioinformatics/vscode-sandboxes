@@ -30,7 +30,7 @@ type Config struct {
 
 func Main(config Config) {
 	if len(os.Args) == 2 && os.Args[1] == "--licenses" {
-		fmt.Print(licensing.License, "\n", licensing.ThirdPartyNotices)
+		fmt.Print(licensing.License, "\n", licensing.ThirdPartyNotices, "\n", licensing.Disclaimer)
 		return
 	}
 	if startui.HandleHelper() {
@@ -54,7 +54,7 @@ func Main(config Config) {
 		c.VersionLabel = ""
 	}
 	if config.Unified {
-		c = startui.Config{Name: "VS Code - Docker Sandboxes", Slug: "sandboxes", Version: "3.13", VersionLabel: "Python version", Agent: "both", Project: filepath.Join(home, "sandboxes", "python-sandbox-project"), Sandboxes: startui.Catalog()}
+		c = startui.Config{Name: "VS Code - Sandboxes", Slug: "sandboxes", Version: "3.13", VersionLabel: "Python version", Agent: "both", Project: filepath.Join(home, "sandboxes", "python-sandbox-project"), Sandboxes: startui.Catalog()}
 	}
 	if invokedAsProjectRunner(config, executablePath()) {
 		c.ProjectMode = true

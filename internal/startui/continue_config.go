@@ -28,6 +28,23 @@ func privateContinueConfig(ctx context.Context, s Selection) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Discover private models for Continue: %w", err)
 	}
+	return privateContinueConfigForModels(s, models)
+}
+
+// Shared by Local discovery and discovery inside a Remote container.
+func privateContinueConfigForModels(s Selection, models []string) ([]byte, error) {
+	data, err := endpointConfig(s)
+	if err != nil {
+		return nil, err
+	}
+	var config map[string]any
+	if err := toml.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+	provider, _ := config["model_provider"].(string)
+	providers, _ := config["model_providers"].(map[string]any)
+	settings, _ := providers[provider].(map[string]any)
+	base, _ := settings["base_url"].(string)
 	if len(models) == 0 {
 		return nil, errors.New("The private endpoint returned no models for this API key.")
 	}

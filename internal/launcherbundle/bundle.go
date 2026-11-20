@@ -65,6 +65,7 @@ func Materialize(slug, destination string) error {
 	}
 	for filename, text := range map[string]string{
 		"LICENSE":                 licensing.License,
+		"DISCLAIMER.txt":          licensing.Disclaimer,
 		"THIRD-PARTY-NOTICES.txt": licensing.ThirdPartyNotices,
 	} {
 		if err := os.WriteFile(filepath.Join(destination, filename), []byte(text), 0644); err != nil {
@@ -80,4 +81,15 @@ func CommonAsset(name string) ([]byte, error) {
 		return nil, fmt.Errorf("invalid common asset name")
 	}
 	return bundles.ReadFile("bundles/common/assets/" + name)
+}
+
+// ProjectAsset shares the local project's templates with the remote launcher.
+func ProjectAsset(slug, name string) ([]byte, error) {
+	if slug != "python-sandbox" && slug != "r-sandbox" && slug != "bioinformatics-sandbox" {
+		return nil, fmt.Errorf("invalid project type")
+	}
+	if strings.ContainsAny(name, "/\\") {
+		return nil, fmt.Errorf("invalid asset name")
+	}
+	return bundles.ReadFile("bundles/" + slug + "/assets/" + name)
 }

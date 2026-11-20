@@ -30,7 +30,7 @@ done
 unified_resources="$repository_root/sandbox-launcher/assets/VS Code Sandboxes.app/Contents/Resources"
 mkdir -p "$unified_resources/Launchers"
 install_helpers "$unified_resources"
-cp "$repository_root/LICENSE" "$repository_root/THIRD-PARTY-NOTICES.txt" "$unified_resources/"
+cp "$repository_root/LICENSE" "$repository_root/THIRD-PARTY-NOTICES.txt" "$repository_root/DISCLAIMER.txt" "$unified_resources/"
 for language in python r bioinformatics; do
   case "$language" in python) name=Python ;; r) name=R ;; bioinformatics) name=Bioinformatics ;; esac
   worker="$unified_resources/Launchers/$language-sandbox"
@@ -40,7 +40,7 @@ for language in python r bioinformatics; do
   rm -rf -- "$worker/Setup"
   cp -R "$repository_root/internal/launcherbundle/bundles/$language-sandbox" "$worker/Setup"
   cp "$repository_root/internal/launcherbundle/bundles/common/assets/"* "$worker/Setup/assets/"
-  cp "$repository_root/LICENSE" "$repository_root/THIRD-PARTY-NOTICES.txt" "$worker/Setup/"
+  cp "$repository_root/LICENSE" "$repository_root/THIRD-PARTY-NOTICES.txt" "$repository_root/DISCLAIMER.txt" "$worker/Setup/"
   ln -sf '../../Sandbox Desktop' "$worker/Sandbox Desktop"
   ln -sf '../../Sandbox Window' "$worker/Sandbox Window"
 done

@@ -37,6 +37,7 @@ func TestMaterializeSandboxBundles(t *testing.T) {
 				filepath.Join("assets", "install-continue.js"),
 				filepath.Join("assets", "setup-continue.sh"),
 				"THIRD-PARTY-NOTICES.txt",
+				"DISCLAIMER.txt",
 				filepath.Join("scripts", "setup-project.sh"),
 				filepath.Join("assets", test.runtime),
 				filepath.Join("assets", "install-coding-agents.sh"),

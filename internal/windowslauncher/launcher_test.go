@@ -99,7 +99,7 @@ func TestLicensesFlagBypassesSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != licensing.License+"\n"+licensing.ThirdPartyNotices {
-		t.Fatal("--licenses did not print both complete license documents")
+	if string(got) != licensing.License+"\n"+licensing.ThirdPartyNotices+"\n"+licensing.Disclaimer {
+		t.Fatal("--licenses did not print complete license, third-party and responsibility notices")
 	}
 }

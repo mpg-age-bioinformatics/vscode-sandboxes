@@ -16,7 +16,7 @@ func main() {
 	}
 	if len(os.Args) == 2 && os.Args[1] == "--unified" {
 		home, _ := os.UserHomeDir()
-		c := startui.Config{Name: "VS Code - Docker Sandboxes", Slug: "sandboxes", Version: "3.13", VersionLabel: "Python version", Agent: "both", Project: filepath.Join(home, "sandboxes", "python-sandbox-project"), Sandboxes: startui.Catalog()}
+		c := startui.Config{Name: "VS Code - Sandboxes", Slug: "sandboxes", Version: "3.13", VersionLabel: "Python version", Agent: "both", Project: filepath.Join(home, "sandboxes", "python-sandbox-project"), Sandboxes: startui.Catalog()}
 		err := startui.Run(c, func(s startui.Selection, log io.Writer) error {
 			return runWorker(s, log)
 		})

@@ -1,0 +1,26 @@
+VS Code Sandboxes — User responsibility and limitation of liability
+
+USE AT YOUR OWN RISK. This software, its launchers, installers, container images,
+configuration, and documentation are provided "AS IS" and "AS AVAILABLE", without
+warranties or guarantees of any kind, to the maximum extent permitted by
+applicable law. No guarantee is made about security, privacy, isolation,
+correctness, availability, compatibility, or fitness for a particular purpose.
+
+You are responsible for your use and misuse of this software, the commands and
+agent actions you authorize, the data and credentials you provide, and the
+results you rely on. This includes reviewing generated code and outputs,
+maintaining backups, protecting credentials, managing compute and service costs,
+and complying with applicable laws, licenses, and institutional or cluster rules.
+
+To the maximum extent permitted by applicable law, the authors, copyright
+holders, maintainers, contributors, and distributors assume no responsibility
+for users' activities and shall not be liable for any claims, damages, costs,
+or losses arising from installing, using, misusing, or being unable to use this
+software or related materials. This includes data loss or corruption, disclosure
+of data or credentials, security incidents, unintended agent actions, incorrect
+results, service interruptions, and local, cloud, HPC, or model-provider charges.
+
+Nothing in this notice excludes or limits liability or rights that cannot
+lawfully be excluded or limited. This notice accompanies the MIT License in
+LICENSE; it does not replace or change the license grant. Third-party software
+and services remain subject to their own licenses and terms.

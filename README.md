@@ -1,4 +1,4 @@
-# VS Code - Docker Sandboxes
+# VS Code - Sandboxes
 
 One macOS application or Windows executable that creates reproducible development environments
 with Docker Sandboxes and opens them in Visual Studio Code. Choose **Python**, **R**,
@@ -16,13 +16,21 @@ If an existing `skills/` Git repository has no origin, setup first prepares a fr
 clone, preserves the original in `skills.backup.XXXXXX/skills`, and reports the backup
 location. A different origin or a Git configuration error stops setup without replacing it.
 
+**Use at your own risk.** Users are responsible for their activities, agent actions,
+data, credentials, and costs. To the maximum extent permitted by applicable law,
+the authors and contributors provide no warranty and accept no liability for
+resulting claims, damage, or loss. Read the [responsibility notice](DISCLAIMER.txt)
+and [liability information](#user-responsibility-and-liability).
+
 ## Contents
 
+- [User responsibility and liability](#user-responsibility-and-liability)
 - [Available sandboxes](#available-sandboxes)
   - [Python Sandbox](#python-sandbox)
   - [R Sandbox](#r-sandbox)
   - [Bioinformatics Sandbox](#bioinformatics-sandbox)
 - [Startup window and connection settings](#startup-window-and-connection-settings)
+- [Remote HPC workspaces](#remote-hpc-workspaces)
 - [macOS](#macos)
   - [macOS requirements](#macos-requirements)
   - [Verify macOS requirements before downloading](#verify-macos-requirements-before-downloading)
@@ -64,7 +72,7 @@ code/data layout, VS Code tooling, and either Codex or Claude Code.
 
 ## Startup window and connection settings
 
-Open **VS Code - Docker Sandboxes** and select the **Project folder** first. Type
+Open **VS Code - Sandboxes** and select the **Project folder** first. Type
 its path or click **Browse…** to choose or create a folder. Editing the field does
 not open the picker. Then choose the sandbox type and Python/R version for a new
 project. Changing types keeps your selected folder.
@@ -217,9 +225,285 @@ Each agent's sandbox sign-in state survives container recreation.
 An endpoint on the host must use a hostname reachable from the sandbox;
 `localhost` inside the sandbox refers to the sandbox itself.
 
+## Remote HPC workspaces
+
+Building a missing Remote image requires at least **20 GiB free on the local
+drive and inside the temporary builder**; larger/custom images can need more.
+The launcher checks before starting and stops the temporary build if host free
+space falls below a 2 GiB reserve. Registry metadata is resolved without
+pre-pulling duplicate images, and BuildKit exports directly to the upload
+archive. Existing verified local/server images can be reused without a new
+build. Storage errors require freeing space (or using a server image), rather
+than changing the Python/R version or Dockerfile dependencies.
+
+Remote agent containment, exact Apptainer flags, syscall restrictions, filesystem
+exposure, image portability and remaining limitations are documented in
+[APPTAINER.md](APPTAINER.md). New allocations use the strict policy; existing
+running allocations must be replaced to receive it.
+
+The startup window has **Local** and **Remote** browser-style tabs. Local keeps
+the Docker Sandboxes workflow. Remote opens VS Code inside Apptainer on a Slurm
+compute node through your existing login-node SSH alias and an `srun` step inside
+the allocation. Compute-node hostnames are display labels only: the launcher never
+connects to a compute-node address or its SSH daemon. The container SSH endpoint
+listens on loopback and its protocol stream travels through Slurm.
+
+Choose an **Environment / image source**:
+
+| Source | Image preparation |
+| --- | --- |
+| Python | Uses Local's `mcr.microsoft.com/devcontainers/python:<major.minor>-bookworm` base; specify the Python series. |
+| R | Uses Local's `ghcr.io/rocker-org/devcontainer/r-ver:<version>` base; specify an R series or patch version. |
+| General bioinformatics | Uses the same `docker.io/docker/sandbox-templates:shell-docker` base as the supported Local shell runtime. |
+| Online container registry | Enter an OCI reference such as `docker.io/library/ubuntu:24.04` or `docker://ghcr.io/your-org/image:tag`. Docker Hub web page URLs are not image references. |
+| Upload a Dockerfile | Select a self-contained Dockerfile from your laptop, up to 512 KiB. Its final image must be Debian/Ubuntu based. Local COPY/ADD context files are not uploaded; put their creation in the recipe or use online sources. |
+| Cached image on server | Automatically loads ready SIFs in the next row from the configured image cache; reuse the original preset/version/project template. No local Docker is needed. |
+| Existing SIF on the HPC | Enter an absolute path to an existing compatible `.sif`; no local build or local Docker Sandboxes is needed. |
+
+When a requested image is absent from the server cache, the launcher builds **inside a dedicated
+local Docker Sandbox**, adding SSH, VS Code and coding-agent dependencies to a
+portable Dockerfile. It uses the sandbox's Docker Engine rather than a host Docker
+socket. These modes require local Docker Sandboxes as well as VS Code and OpenSSH.
+Automatic missing-tool setup is available in the Remote tab. Builds have network
+access scoped to their temporary build sandbox, subject to organization rules.
+
+Set **Compute-node architecture** to amd64 or arm64 to match the HPC. A different
+laptop architecture uses a pinned QEMU/binfmt installer inside the temporary
+sandbox; cross-architecture builds can take considerably longer. The launcher
+retains the complete Dockerfile, pinned base/Node references, image identity and
+recipe hash locally, uploads the Docker archive over SSH with checksum validation,
+and converts it to SIF **inside the Slurm job**, rather than building on the login
+node. **Download prepared Dockerfile** saves the portable recipe before building;
+the recipe retained after a successful build also includes resolved base digests.
+The completed image archive and project recipe are checksum-verified and cached
+for later allocations, so reopening a preset does not rebuild a changing base tag.
+The temporary builder is removed after completion or cancellation. Custom uploads
+and registry sources need an apt-based Debian/Ubuntu final image. Keep credentials
+out of Dockerfiles and module commands; both are saved with launcher preferences.
+
+**Image storage on the HPC** defaults to `~/.local/share/vscode-sandboxes/images`,
+separate from persistent container configuration, and must be accessible on login
+and compute nodes. Choosing **Cached image on server** automatically reads the
+server's `metadata.json` and shows available images below the image-storage
+setting. Changing the SSH login or image-storage path
+reloads the list; **Refresh images** reloads it manually. Each entry records source, language version,
+architecture, recipe fingerprint, built image identity, pinned Dockerfile and
+image lock; SIFs live under `<image-id>/image.sif`. Metadata updates are atomic.
+
+Before building, the launcher checks this catalog for the requested recipe.
+A cache hit skips the local build, large image transfer and SIF conversion; only
+the small, current project template is copied over SSH. Local template changes
+also reuse a matching image archive. On a cache miss, conversion runs once under
+an image lock, publishes a complete SIF atomically, and removes the staged image
+archive. Incomplete entries are not offered as reusable images. Nothing is
+uploaded to Docker Hub. Slurm queue time, VS Code Server setup and a new project's
+first dependency installation still apply. The launcher shows preparation phases
+and streams the Slurm startup log while the environment is being initialized;
+a RUNNING job can still be installing project packages before VS Code opens.
+Remote activity reports upload percentage, transferred MiB, average MiB/s and
+estimated time remaining about every two seconds. This counts bytes in the
+existing SSH stream; it adds no remote polling, extra SSH connections or probe
+traffic. A completed transfer is confirmed separately after the remote SHA-256
+check succeeds.
+
+The Python, R and bioinformatics presets reuse the bundled Local project assets:
+`code/`, `data/`, `.vscode/`, `AGENTS.md`, editor recommendations, scientific-library
+instructions, skills setup and Git conventions. Python uses a root `.venv` with
+tracked `code/requirements.in` and a resolved `code/requirements.lock`; R uses
+`.r-library`, `.Renviron`, `.Rprofile`, the shared renv setup and `renv.lock`. The
+runtime instructions describe Apptainer instead of nested Docker. Existing project
+files are preserved; a different preset/version/architecture or conflicting image
+lock requires a separate project folder or deliberate migration. The actual image
+recipe is kept in `code/Dockerfile`, or `code/Dockerfile.remote` when preserving an
+existing Dockerfile. Image metadata lives in `code/.sandbox/remote-image.lock.json`.
+
+Configure the SSH login alias and a persistent state location shared by the
+login and compute nodes. **Project directory** defaults to `~/sandboxes`,
+**Slurm partition** to `cluster`, and **CPUs** to **1**. One CPU is appropriate
+for single-threaded work; increase it for parallel code or libraries that need
+more threads. Memory, time limit, NVIDIA GPUs, Apptainer executable and queue wait
+remain configurable. There is no Slurm account field: submissions use the logged-in
+user's default Slurm account, without an account flag or a saved `SBATCH_ACCOUNT`
+override.
+
+**Additional folders (optional)** accepts a comma-separated list, for example
+`/shared/data , ~/references, /scratch/results`. Spaces around commas, empty
+entries and duplicates are ignored. Paths can be absolute or start with `~/`,
+which expands on the HPC. Every additional folder must exist on the login and
+compute nodes and mounts **read-only** at its full cluster path inside Apptainer.
+Additional folders must not overlap the project. The launcher creates the project
+if needed, mounts it **read/write at its exact expanded HPC path**, and opens that
+path in VS Code. Your HPC ownership, permissions and ACLs still apply; Apptainer
+cannot grant rights your account lacks.
+
+New Remote images include Bash and bash-completion. New terminals use Bash with
+Tab completion enabled. The container installs and verifies pinned Continue
+2.0.0 before starting SSH/VS Code, using the same distribution as Local. Remote
+SSH defaults use plain extension IDs; version-qualified IDs are filtered out.
+Remote SSH installs the remaining language and agent extensions automatically
+inside the remote container; the
+launcher merges these into VS Code's Remote SSH defaults without removing your
+existing extension choices.
+
+Save all work, results and installed project packages in the project folder: it
+is your **writable persistent workspace**, and survives container or Slurm job
+termination. Container home, VS Code Server, extensions and agent sign-ins are
+allocation-local and disposable. Existing files in read-only additional folders
+remain on the HPC, while launcher state stores allocation/connection metadata
+and the separate image cache remains reusable. Temporary storage comes from the
+compute-node environment: `SLURM_TMPDIR`, then `TMPDIR`, `TMP`, or `TEMP`. If none is defined,
+`mktemp` uses the server's OS default. The launcher creates an allocation-specific
+subfolder there and uses it for Apptainer's work directory and container temporary
+files; it does not hardcode a host `/tmp` path or put them in persistent state.
+`TMPDIR`, `TMP`, and `TEMP` are supplied to container SSH sessions as well. For R,
+a path containing spaces is exposed through a space-free container alias while
+the actual files remain in the server-selected storage. The launcher cleans its
+subfolder on normal exit/termination; forced kills may require site cleanup.
+
+**Modules to load** accepts names such as `apptainer, gcc/13`; enter names rather
+than `module load` commands. The launcher initializes the site's module command
+when possible, then loads the named modules for submission, Slurm status/cancel
+requests, and the compute-node job. Each SSH request has its own shell. If your
+site needs additional initialization, use **Module initialization / site setup**
+in the advanced options. Saved legacy setup commands remain there.
+
+Choose **Submit job and open VS Code**. After building/uploading if needed, the
+launcher submits one job, monitors its queue state, starts the container SSH
+service and verifies that the endpoint is inside Apptainer before opening VS Code.
+VS Code Server, remote extensions, Codex, terminals and notebooks run there. Sign
+in from that workspace; Local agent credentials and endpoint keys are not copied.
+
+**Private endpoint (optional)** in Remote accepts an endpoint URL, a separate
+sandbox API key, and **Continue** or **Codex**, using the same generated settings
+as Local. Continue is configured in both cases; choosing Codex also configures
+its private provider with the Responses API and the first discovered model.
+Model discovery runs inside the HPC container, so the endpoint and `/models`
+must be reachable from there. Continue uses `/chat/completions`; Codex requires
+`/responses` too.
+
+Credentials are sent over SSH stdin and stored only in the allocation's temporary
+container home (`~/.continue/config.yaml` and, when selected, `~/.codex/config.toml`),
+with owner-only permissions. They are kept out of launcher preferences, session
+records, image metadata, project files and logs. Enter them when submitting a new
+allocation, attaching or reconnecting. They are applied automatically before
+VS Code opens, with no separate Apply step. Blank fields preserve the current
+connection. The fields clear after
+an accepted request, and each new allocation needs its own credentials. Older
+allocations with a persistent home must be replaced before using this feature.
+
+**Reconnect** opens the saved allocation without another submission. **Cancel
+preparation** stops a build/upload before submission; **Cancel allocation** stops
+the identified live Slurm job. Closing the launcher or reaching the queue-wait
+limit does not cancel an allocation. Slurm expiry or cancellation stops processes;
+files in persistent mounted directories remain. Interrupted submissions are
+recovered by their unique identifier before another job can be submitted.
+
+New Remote allocations have a **24-hour disconnected timeout**. One watchdog
+on the login server monitors all launcher sandboxes belonging to your HPC user,
+including sandboxes started from different laptops or configuration directories.
+It checks authenticated SSH sessions against each allocation's own SSH server
+and unique job identity. Connecting to sandbox A does not renew sandbox B.
+An open VS Code/SSH session keeps its sandbox alive; keyboard activity is not
+required. After the last connection closes, that sandbox gets 24 hours before
+cancellation. A sandbox that was never connected gets the same grace period
+after becoming ready. Pending jobs do not accrue disconnected time.
+
+The single watchdog checks once a minute, runs independently of your laptop,
+and exits when no registered allocations remain. Short authentication hooks
+record connections between checks; they are not additional watchdog processes.
+Records and logs live under `~/.local/share/vscode-sandboxes/watchdog`.
+Existing allocations created without watchdog support retain their previous
+behavior. A site's policy must allow a detached login-node process. If the
+server restarts or terminates it, a subsequent launch or allocation status check
+starts the watchdog again; there is no separate service supervising it.
+Slurm's hard time limit still takes priority: new profiles default to 48 hours,
+while saved time limits and cluster limits remain in effect.
+
+In **Remote**, use **Start a new sandbox** to configure and submit a workspace,
+or **Connect to running sandboxes** to discover existing allocations automatically.
+SSH host, persistent configuration and module settings are shared between these
+subtabs. **List running sandboxes** refreshes your launcher-managed Slurm allocations
+from their saved metadata and live job identity. Choose an allocation and use
+**Attach** to open that existing job, or **Stop allocation** to cancel only that
+job. Attach also works from another laptop using the same HPC account: the
+launcher registers a new per-allocation public key through the login connection.
+In **Start a new sandbox**, controls for the current allocation appear only while
+one is active. **Start another sandbox** leaves the current allocation running and unlocks the form for
+another project. Unrelated Slurm jobs are excluded. Older jobs without launcher
+profile metadata cannot be attached through this inventory.
+
+Your site must permit noninteractive login-node SSH, Slurm jobs, additional `srun`
+steps in an existing allocation, and a rootless loopback SSH service in Apptainer.
+The server catalogs need Python 3 on the login node; image conversion uses
+`flock` on the compute node. No login-to-compute SSH or TCP forwarding is required. Test
+your alias in a terminal first, including host verification, SSH-agent setup and
+MFA; site-approved SSH multiplexing may be necessary. Custom ports/jump hosts
+belong in SSH config. Module setup runs as your HPC account in the login and
+compute-node shells; include your site's shell initialization if needed. The compute node needs storage
+for uploaded archives/SIFs and permission to perform archive-to-SIF conversion.
+
+Existing SIFs need compatible VS Code Server libraries, Bash, Python 3, Node.js, tar,
+`/usr/sbin/sshd`, `ssh-keygen`, `/run/sshd`, writable-home support and Codex. A
+starting Apptainer recipe is [remote.def](internal/startui/remote_assets/remote.def).
+Remote offers **No internet**, **Selected sites**, and **Open** for new
+allocations. Selected sites and No internet use Apptainer's unprivileged network
+namespace with no external interfaces; startup fails if the cluster does not
+support it. Selected sites permits HTTP/CONNECT through an external allowlist
+gateway. Other protocols and direct IP/DNS access remain blocked. Private endpoint
+hosts are disclosed exceptions added at startup. Allowed services can still
+receive workspace data; this is not content filtering or TLS inspection.
+
+Restricted modes provision VS Code Server and default extensions separately in
+a temporary helper without project/data/credentials mounted. Those vendor
+downloads and the laptop's editor connection are outside workspace egress
+control. Project setup obeys the policy from its first process. No internet skips
+online package installation/skills cloning, so prepare dependencies beforehand.
+Changing a running allocation's policy requires starting a new allocation.
+See [the precise implementation and limits](APPTAINER.md#no-internet-and-selected-sites).
+Open retains cluster networking; cluster policies always apply.
+
+Remote uses a per-allocation SSH key, pinned host keys, strict host verification
+and no agent forwarding. Its managed `ProxyCommand` uses the login node to start
+a job-identity-checked `srun` relay; it has no direct-compute fallback. It adds an `Include` for managed aliases to your laptop's
+`~/.ssh/config`, preserving existing entries; cancellation removes the allocation
+alias and private key. Apptainer uses your HPC account and cluster network policies;
+Remote internet controls are enforced separately from Local microVM networking. Allocations
+created before the Slurm relay was added need to be replaced with a new allocation.
+
+Automated fixtures cover sources, recipes, local asset reuse, build orchestration,
+compute-node conversion, project initialization, recovery, cancellation and UI.
+Live amd64 Python 3.13 and R 4.5 image builds completed on Apple silicon,
+including archive export and builder cleanup. The R preset repairs affected
+x86-64 shared-library metadata in R's runtime dependency graph for 16 KiB page
+compatibility. This resolves the observed ICU loading failure under Apple silicon
+emulation, including related Cairo/PNG library mappings. The rewrite preserves
+executable sections, SONAMEs and dependency names, replaces files atomically, and
+records original/aligned hashes in
+`/usr/local/share/vscode-sandboxes/r-elf-alignment.json` inside the image. Already
+compatible libraries are left alone. The complete repair remains in the exported
+Dockerfile, and the changed recipe automatically invalidates older image caches.
+Every new R preset image must pass ICU Unicode collation, CSV, PDF and Cairo PNG
+checks during its build. The regression passed five consecutive times under the
+launcher's amd64 emulator on Apple silicon. Live testing on an x86-64 Slurm
+cluster with Apptainer 1.2.5 also passed image upload, compute-node SIF conversion,
+Python 3.13.18 and R 4.5.3 project setup, additional-folder mounts, container SSH,
+Codex CLI startup, reconnect and cancellation. The Slurm relay also passed
+concurrent connections and a full binary transfer on a one-CPU Slurm 19.05
+allocation, without compute-node SSH. Native R passed the same ICU, CSV,
+PDF and PNG smoke test and renv verification. Interactive VS Code, authenticated
+Codex execution, notebook UI sessions and Windows end-to-end validation remain
+outstanding. Live watchdog tests also passed with concurrent Python/R
+allocations: keep the connected allocation alive, cancel the disconnected one,
+then cancel the remaining allocation after disconnection and verify that the
+single watchdog exits and releases its lock. These tests advance only the
+disposable allocations' idle timestamps; they do not wait 24 hours or shorten
+the production timeout. See [VS Code Remote-SSH](https://code.visualstudio.com/docs/remote/ssh),
+[Apptainer Docker archive conversion](https://apptainer.org/docs/user/latest/appendix.html#docker-archive)
+and [Docker multi-platform builds](https://docs.docker.com/build/building/multi-platform/).
+
 ## Required tools setup
 
-Every launch checks for Docker Sandboxes and Visual Studio Code, including launches
+The **Local** tab checks for Docker Sandboxes and Visual Studio Code, including launches
 from an existing project's app or executable. If either tool is missing, **Set up
 your computer** appears automatically and workspace startup stays blocked. There
 is no permanent dismissal; removing a tool brings this screen back.
@@ -309,8 +593,8 @@ No host Git or container-runtime checks are needed.
 1. Download **VS-Code-Sandboxes.dmg** from the release assets (or use the
    locally built [disk image](sandbox-launcher/assets/VS-Code-Sandboxes.dmg)).
 2. Open the disk image.
-3. Drag **VS Code - Docker Sandboxes** to **Applications**.
-4. Eject the disk image and open **VS Code - Docker Sandboxes**.
+3. Drag **VS Code - Sandboxes** to **Applications**.
+4. Eject the disk image and open **VS Code - Sandboxes**.
 5. Choose **Python**, **R**, or **General bioinformatics** in the startup window.
 
 The app includes all three setup payloads; no separate language launcher is needed.
@@ -341,7 +625,7 @@ page under **Assets** and verify its checksum instead.
 
 ### Create projects on macOS
 
-1. Open **VS Code - Docker Sandboxes** from Applications.
+1. Open **VS Code - Sandboxes** from Applications.
 2. Choose **Python**, **R**, or **General bioinformatics**.
 3. For Python or R, choose a `major.minor` or `major.minor.patch` version.
    The environment uses that major/minor series; R selects its latest Rocker patch.
@@ -707,6 +991,26 @@ extension's private managed library before opening VS Code. Interactive R startu
 rechecks it after extension updates; completed revisions require no reinstall or
 installation prompt. Editor infrastructure stays separate from project renv packages.
 
+## User responsibility and liability
+
+This software, its installers, container images, setup and documentation are
+provided **as is**, without warranties or guarantees, to the maximum extent
+permitted by applicable law. The authors, copyright holders, maintainers,
+contributors and distributors assume no responsibility for users' activities
+and disclaim liability for claims, damages, costs and losses arising from use,
+misuse or inability to use these materials, to the same extent.
+
+You are responsible for reviewing agent commands and generated results,
+maintaining backups, protecting credentials, controlling compute and service
+charges, and complying with applicable laws, licenses and institutional or HPC
+rules. Failures can include data loss or disclosure, unintended edits or agent
+actions, incorrect results, security incidents and service interruptions.
+
+The complete [DISCLAIMER.txt](DISCLAIMER.txt) accompanies the installers, app,
+Windows executable, release assets and generated projects. It supplements the
+MIT notice without changing the license grant. Mandatory legal rights and
+liability that cannot lawfully be excluded or limited remain unaffected.
+
 ## License
 
 This project's original code and documentation are licensed under the
@@ -725,9 +1029,10 @@ and terms. This project's license does not replace those terms or grant rights
 to third-party trademarks.
 
 Dependency notices and trademark information are in
-[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Windows launchers built from
-this revision also display both license documents with `--licenses`, without
-starting setup. macOS disk images include both documents at the top level and
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt); the responsibility notice is
+[DISCLAIMER.txt](DISCLAIMER.txt). Windows launchers built from
+this revision also display the license and both notices with `--licenses`, without
+starting setup. macOS disk images include all three documents at the top level and
 inside each application's `Contents/Resources/` directory.
 
 This is an independent project and is not endorsed by the owners of the tools
@@ -736,7 +1041,8 @@ of the Python Software Foundation. The Python icon is a stylized derivative;
 commercial reuse may require separate permission under the
 [PSF trademark policy](https://www.python.org/psf/trademarks/).
 
-Generated projects retain these notices in `code/.sandbox/VS-Code-Sandboxes-LICENSE.txt`
-and `code/.sandbox/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt`. These cover the supplied
+Generated projects retain these notices in `code/.sandbox/VS-Code-Sandboxes-LICENSE.txt`,
+`code/.sandbox/VS-Code-Sandboxes-THIRD-PARTY-NOTICES.txt` and
+`code/.sandbox/VS-Code-Sandboxes-DISCLAIMER.txt`. These cover the supplied
 launcher code and its dependencies; they do not choose a license for your own
 project code.
