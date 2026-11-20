@@ -1,0 +1,80 @@
+name: Bug report
+description: Report an installation, Local, or Remote sandbox problem.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Search existing issues first and include enough detail to reproduce it.
+        Reports are public. Remove API keys, tokens, passwords, SSH keys, sensitive data, and private paths or hostnames from logs and screenshots before sharing them.
+  - type: input
+    id: version
+    attributes:
+      label: Launcher version or commit
+      description: The release tag you downloaded, or commit if running from source. Enter "unknown" if you cannot find it.
+      placeholder: "Release tag, commit, or unknown"
+    validations:
+      required: true
+  - type: dropdown
+    id: workflow
+    attributes:
+      label: Where does the problem occur?
+      options:
+        - Installation / first-run setup
+        - Local sandbox
+        - Remote HPC sandbox
+        - Both Local and Remote
+        - Other / unsure
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Laptop operating system and architecture
+      description: Include the OS version and whether the machine uses Apple silicon, Intel, or AMD.
+      placeholder: "macOS version + Apple silicon, or Windows 11 + x64"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Describe the settings you chose and the actions leading to the problem. Include the environment/image source and Python/R version when relevant.
+      placeholder: |
+        1. Open Local or Remote...
+        2. Select...
+        3. Start the sandbox...
+        4. The problem occurs when...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the exact error message if available.
+      placeholder: What happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Tool versions and Remote cluster details, if relevant
+      description: Include known VS Code and Docker Sandboxes versions. For Remote, include Slurm/Apptainer versions, modules, image source, and whether the allocation was queued or running. Do not include credentials.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant activity or error logs
+      description: Copy the relevant Startup activity or Remote activity output. Local also offers Export activity. Review and redact secrets and sensitive information before pasting.
+      render: text
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or additional context
+      description: Drag in screenshots if useful, after reviewing them for sensitive information. Mention any workaround you tried.

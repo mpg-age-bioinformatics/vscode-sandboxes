@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an improvement to the launcher or sandbox workflows.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues for similar suggestions first. Describe the workflow you want to improve; examples help.
+        Reports are public, so do not include credentials or sensitive project data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Explain your current workflow and what is difficult or missing. Say whether this concerns Local, Remote, installation, or another area.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed behavior
+      description: Describe what you would like the application to do.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or examples
+      description: Include any workaround, screenshots, or examples that help explain the request.
