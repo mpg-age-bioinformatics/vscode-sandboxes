@@ -1,5 +1,7 @@
 # VS Code - Sandboxes
 
+![VS Code Sandboxes overview](docs/images/vscodesandboxes.png)
+
 One macOS application or Windows executable that creates reproducible development environments
 with Docker Sandboxes and opens them in Visual Studio Code. Choose **Python**, **R**,
 or **General bioinformatics** in the same startup window.
@@ -235,6 +237,14 @@ An endpoint on the host must use a hostname reachable from the sandbox;
 `localhost` inside the sandbox refers to the sandbox itself.
 
 ## Remote HPC workspaces
+
+The **Local image-build cache** card at the bottom of Remote reports the disk
+space used on your laptop by retained image archives, recipes and partial builds.
+**Clear cache** removes these local build files. It is blocked during builds and
+uploads, including those in another launcher window. Existing HPC images,
+allocations, project files and shared Docker template images are preserved.
+Temporary image-builder sandboxes are removed automatically after each build.
+
 
 Building a missing Remote image requires at least **20 GiB free on the local
 drive and inside the temporary builder**; larger/custom images can need more.

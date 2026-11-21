@@ -10,14 +10,19 @@ function harness(vscode=true,docker=false){
  const elements=new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,{value:'',textContent:'',hidden:false,disabled:false,listeners:{},attrs:{},children:[],appendChild(child){this.children.push(child);},addEventListener(type,fn){this.listeners[type]=fn;},setAttribute(key,value){this.attrs[key]=value;},focus(){this.focused=true;}}]));
  const get=id=>elements.get(id),calls=[];
  get('remotePanel').hidden=true;
+ let holdCatalog=false,pendingCatalog=null;
+ let cache={bytes:1073741824,entries:2,files:8,measured:true,inUse:false},clearError='';
  let status={running:false,session:{},phase:''},prerequisites={ssh:true,vscode,docker,supported:true,installing:false};
  const profile={login:'hpc',image:'/images/workspace.sif',project:'~/sandboxes',folders:'',stateDir:'~/state',partition:'cluster',cpus:1,memory:'8G',time:'02:00:00',gpus:0,apptainer:'apptainer',moduleNames:'apptainer',modules:'',waitMinutes:30};
  const window={},context=vm.createContext({URL,window,document:{body:{dataset:{}},getElementById:get,createElement(){return {};}},setTimeout(){},updateConnectionControls(){},fetch:async(route,options)=>{
   calls.push({route,body:options?.body&&JSON.parse(options.body)});
+  if(route==='remote/cache')return {ok:true,json:async()=>cache};
+  if(route==='remote/cache/clear'){if(clearError)return {ok:false,text:async()=>clearError};cache={...cache,bytes:0,entries:0,files:0};return {ok:true,json:async()=>({...cache,removedBytes:1073741824})};}
   if(route==='remote/recipe')return {ok:true,text:async()=>'%post\n image requirements'};
   if(route==='remote/start'){status={running:true,phase:'Waiting for job 42',session:{active:true,jobID:'42',profile},text:'Queued'};return {ok:true};}
   if(route==='remote/cancel'){status={running:false,phase:'Cancelled',session:{active:false}};return {ok:true};}
   if(route==='remote/images')return {ok:true,json:async()=>[{id:'a'.repeat(64),source:'python',version:'3.13',architecture:'amd64',size:1048576}]};
+  if(route==='remote/sandboxes'&&holdCatalog)return new Promise(resolve=>{pendingCatalog=()=>resolve({ok:true,json:async()=>[]});});
   if(route==='remote/sandboxes')return {ok:true,json:async()=>[{token:'b'.repeat(32),jobID:'44',queueState:'RUNNING',profile}]};
   if(route==='remote/attach'){status={running:true,session:{active:true,jobID:'44',profile}};return {ok:true};}
   if(route==='remote/stop-selected'||route==='remote/detach'){status={running:false,session:{active:false}};return {ok:true};}
@@ -27,7 +32,7 @@ function harness(vscode=true,docker=false){
   return {ok:true,json:async()=>({profile,status,prerequisites})};
  }});
  vm.runInContext(script,context);
- return {get,calls,window,setStatus(s){status=s;},async remote(){get('remoteTab').listeners.click();await tick();await tick();},async click(id){get(id).listeners.click();await tick();await tick();},async change(id){get(id).listeners.change();await tick();await tick();}};
+ return {get,calls,window,holdCatalog(){holdCatalog=true;},releaseCatalog(){pendingCatalog?.();},setCache(value){cache=value;},failClear(message){clearError=message;},setStatus(s){status=s;},async remote(){get('remoteTab').listeners.click();await tick();await tick();},async click(id){get(id).listeners.click();await tick();await tick();},async change(id){get(id).listeners.change();await tick();await tick();}};
 }
 (async()=>{
  const h=harness();assert.equal(h.calls.length,0,'Local must remain default without querying HPC');
@@ -103,6 +108,29 @@ function harness(vscode=true,docker=false){
  await modes.click('remoteNew');assert.equal(modes.get('remoteNewPanel').hidden,false);assert.equal(modes.get('remoteConnectionFields').disabled,false);
  const returning=harness();returning.setStatus({running:false,session:{active:true,jobID:'42',profile:{login:'hpc'}}});await returning.remote();
  assert.equal(returning.get('remoteConnectPanel').hidden,false,'saved allocation opens Connect automatically');
+ const disk=harness();await disk.remote();
+ assert.match(disk.get('remoteCacheUsage').textContent,/1.0 GiB.*2 cache entries/);
+ assert.equal(disk.get('remoteClearCache').disabled,false);
+ await disk.click('remoteClearCache');
+ assert(disk.calls.some(c=>c.route==='remote/cache/clear'));
+ assert.match(disk.get('remoteCacheUsage').textContent,/0 B/);
+ assert.match(disk.get('remoteCacheMessage').textContent,/Removed 1.0 GiB/);
+ assert(disk.get('remoteClearCache').disabled,'empty cache is not clearable');
+ const offlineCache=harness();await offlineCache.remote();offlineCache.holdCatalog();
+ await offlineCache.click('remoteConnectTab');
+ assert.match(offlineCache.get('remoteSandboxesStatus').textContent,/Reading running allocations/);
+ assert.equal(offlineCache.get('remoteClearCache').disabled,false,'local cleanup must not depend on an HPC listing completing');
+ offlineCache.releaseCatalog();await tick();await tick();
+ const protectedCache=harness();await protectedCache.remote();
+ protectedCache.setStatus({running:true,session:{active:true,jobID:'42'}});await protectedCache.remote();
+ assert(protectedCache.get('remoteClearCache').disabled,'startup must protect build/upload files');
+ await protectedCache.click('remoteClearCache');
+ assert(!protectedCache.calls.some(c=>c.route==='remote/cache/clear'));
+ const connectedCache=harness();connectedCache.setStatus({running:false,session:{active:true,jobID:'42',profile:{login:'hpc'}}});await connectedCache.remote();
+ assert.equal(connectedCache.get('remoteClearCache').disabled,false,'a running HPC allocation does not pin local build files');
+ const failedCache=harness();await failedCache.remote();failedCache.failClear('Cache is in use by another build');
+ await failedCache.click('remoteClearCache');
+ assert.match(failedCache.get('remoteCacheError').textContent,/in use by another build/,'refresh must retain cleanup errors');
  const policy=harness();await policy.remote();
  assert.equal(policy.get('remoteNetwork').value,'open','old profiles keep Open');
  policy.get('remoteNetworkRestricted').checked=true;await policy.change('remoteNetworkRestricted');

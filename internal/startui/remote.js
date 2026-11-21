@@ -5,6 +5,7 @@
  const csv=value=>[...new Set(value.split(',').map(item=>item.trim()).filter(Boolean))].join(', ');
  const numeric=new Set(['cpus','gpus','waitMinutes']);
  let images=[],sandboxes=[],sitePresets={},lastDefaultSites='';
+ let cache=null,cacheReading=false,cacheClearing=false,cacheError='',cacheActionError='',cacheMessage='',cacheNextCheck=0;
  let dockerfile='',lastSource='',presetVersions={python:'3.13',r:'4.5'};
  let loaded=false,visible=false,connectMode=false,requesting=false,clientError='',status={running:false,session:{}},requirements={};
  async function request(route,options){const response=await fetch(route,options);if(!response.ok)throw Error(await response.text());return response;}
@@ -49,9 +50,16 @@
   element('remoteNewPanel').hidden=connectMode;element('remoteConnectPanel').hidden=!connectMode;
   for(const [id,selected]of [['remoteNewTab',!connectMode],['remoteConnectTab',connectMode]]){element(id).setAttribute('aria-selected',String(selected));element(id).tabIndex=selected?0:-1;}
   const needsBuild=!connectMode&&!['sif','cached'].includes(element('remoteImageSource').value);
-  const s=status.session||{},busy=!!status.running||!!requirements.installing||requesting;
+  const s=status.session||{},busy=!!status.running||!!requirements.installing||requesting||cacheClearing||!!cache?.clearing;
   window.remoteBusy=busy;
   document.body.dataset.running=busy||(typeof active!=='undefined'&&active)||(typeof installingPrerequisites!=='undefined'&&installingPrerequisites)?'true':'false';
+  const localBusy=typeof active!=='undefined'&&active;
+  const cacheBusy=!!status.running||!!requirements.installing||cacheClearing||!!cache?.clearing||localBusy;
+  element('remoteClearCache').disabled=cacheBusy||cacheReading||!!cacheError||!cache||cache.inUse||!cache.measured||!(cache.bytes||cache.entries);
+  element('remoteClearCache').textContent=cacheClearing||cache?.clearing?'Clearing cache…':'Clear cache';
+  element('remoteCacheUsage').textContent=cacheClearing||cache?.clearing?'Clearing local cached build files…':cacheError?'Local cache size unavailable.':cache?.measured?formatCacheBytes(cache.bytes)+' on this laptop · '+cache.entries+' cache entr'+(cache.entries===1?'y':'ies')+(cache.inUse?' · in use':''):cache?.inUse?'Cache is in use by another launcher.':'Checking local cache size…';
+  element('remoteCacheMessage').textContent=cacheMessage;
+  element('remoteCacheError').textContent=cacheActionError||cacheError;
   element('remoteFields').disabled=busy||!!s.active;
   element('remoteEndpointFields').disabled=busy;
   const endpointReady=!!element('remoteEndpointURL').value.trim()&&!!element('remoteEndpointKey').value.trim();
@@ -83,8 +91,30 @@
   log.textContent=text||'Submission, queue state, container startup and connection details will appear here.';if(atBottom)log.scrollTop=log.scrollHeight;
   if(typeof updateConnectionControls==='function')updateConnectionControls();
  }
+ function formatCacheBytes(bytes){
+  if(!bytes)return '0 B';
+  const units=['B','KiB','MiB','GiB','TiB'];let value=bytes,unit=0;
+  while(value>=1024&&unit<units.length-1){value/=1024;unit++;}
+  return (unit?value.toFixed(1):String(value))+' '+units[unit];
+ }
+ async function refreshCache(force=false){
+  if(cacheReading||cacheClearing||(!force&&Date.now()<cacheNextCheck))return;
+  cacheReading=true;render();
+  try{cache=await(await request('remote/cache')).json();cacheError='';}
+  catch(error){cacheError=error.message;}
+  finally{cacheReading=false;cacheNextCheck=Date.now()+15000;render();}
+ }
+ element('remoteClearCache').addEventListener('click',async()=>{
+  if(element('remoteClearCache').disabled)return;
+  cacheClearing=true;cacheActionError='';cacheMessage='';render();
+  try{
+   cache=await(await request('remote/cache/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+   cacheMessage='Removed '+formatCacheBytes(cache.removedBytes||0)+' of local cached files. Images already cached on the HPC remain available.';
+  }catch(error){cacheActionError=error.message;}
+  finally{cacheClearing=false;cacheNextCheck=0;render();await refreshCache(true);}
+ });
  async function refresh(){
-  try{const data=await(await request('remote/status')).json();status=data.status;requirements=data.prerequisites;render();}
+  try{const wasRunning=!!status.running;const data=await(await request('remote/status')).json();status=data.status;requirements=data.prerequisites;render();if(visible)await refreshCache(wasRunning&&!status.running);}
   catch(error){clientError=error.message;element('remoteError').textContent=clientError;}
  }
  async function initialize(){
@@ -99,7 +129,7 @@
   lastDefaultSites=defaultSites();element('remoteSites').value=profile.sites??lastDefaultSites;
   dockerfile=profile.dockerfile||'';element('remoteDockerfilePreview').value=dockerfile;element('remoteDockerfilePreview').hidden=!dockerfile;
   if(profile.cachedImage){setOptions('remoteCachedImage',[{value:profile.cachedImage,label:'Saved image '+profile.cachedImage.slice(0,12)}],'Select a server image');element('remoteCachedImage').value=profile.cachedImage;}
-  loaded=true;render();
+  loaded=true;render();await refreshCache(true);
   if(status.session?.active)selectRemoteMode(true);else if(element('remoteImageSource').value==='cached')await listImages();
   request('remote/recipe').then(r=>r.text()).then(text=>element('remoteRecipe').textContent=text).catch(error=>element('remoteRecipe').textContent=error.message);
  }

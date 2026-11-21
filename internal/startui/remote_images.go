@@ -159,6 +159,11 @@ func prepareRemoteImage(ctx context.Context, p RemoteProfile, token string, log 
 	if err := validateRemoteImage(p); err != nil {
 		return remoteImagePlan{}, err
 	}
+	release, err := lockRemoteCache(false)
+	if err != nil {
+		return remoteImagePlan{}, err
+	}
+	defer release()
 	dir := filepath.Join(settingsDir(), "remote-images", remoteImageIdentity(p))
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return remoteImagePlan{}, err

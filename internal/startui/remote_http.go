@@ -23,6 +23,9 @@ func remotePrerequisites(prerequisites *prerequisiteSetup) map[string]any {
 
 func (p *remoteController) serve(route string, w http.ResponseWriter, r *http.Request, local *logState, prerequisites *prerequisiteSetup) {
 	switch route {
+	case "remote/cache", "remote/cache/clear":
+		p.serveLocalRemoteCache(w, r, route == "remote/cache/clear", local, prerequisites)
+
 	case "remote/activity":
 		if r.Method != http.MethodGet {
 			http.Error(w, "GET required", http.StatusMethodNotAllowed)

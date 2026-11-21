@@ -79,16 +79,17 @@ type RemoteStatus struct {
 
 type remoteController struct {
 	sync.Mutex
-	state        RemoteStatus
-	cancel       context.CancelFunc
-	stopping     bool
-	ssh          func(context.Context, string, string, ...string) (string, error)
-	pollInterval time.Duration
-	lastCheck    time.Time
-	checking     bool
-	generation   uint64
-	prepareImage func(context.Context, RemoteProfile, string, io.Writer) (remoteImagePlan, error)
-	upload       func(context.Context, string, string, string) error
+	state         RemoteStatus
+	cancel        context.CancelFunc
+	stopping      bool
+	cacheClearing bool
+	ssh           func(context.Context, string, string, ...string) (string, error)
+	pollInterval  time.Duration
+	lastCheck     time.Time
+	checking      bool
+	generation    uint64
+	prepareImage  func(context.Context, RemoteProfile, string, io.Writer) (remoteImagePlan, error)
+	upload        func(context.Context, string, string, string) error
 }
 
 func defaultRemoteProfile() RemoteProfile {
@@ -272,7 +273,11 @@ func validRemoteSession(s RemoteSession) bool {
 	return remoteTokenPattern.MatchString(s.Token) && validateRemoteProfile(s.Profile) == nil && (s.JobID == "" || remoteJobPattern.MatchString(s.JobID)) && (s.RunDir == "" || safeRemotePath(s.RunDir, false)) && (s.ProjectPath == "" || safeRemotePath(s.ProjectPath, false))
 }
 func (p *remoteController) snapshot() RemoteStatus { p.Lock(); defer p.Unlock(); return p.state }
-func (p *remoteController) busy() bool             { p.Lock(); defer p.Unlock(); return p.state.Running }
+func (p *remoteController) busy() bool {
+	p.Lock()
+	defer p.Unlock()
+	return p.state.Running || p.cacheClearing
+}
 func (p *remoteController) Write(data []byte) (int, error) {
 	p.Lock()
 	defer p.Unlock()
@@ -328,8 +333,8 @@ func (p *remoteController) start(profile RemoteProfile, reconnect bool, endpoint
 	}
 	p.Lock()
 	defer p.Unlock()
-	if p.state.Running {
-		return errors.New("Remote startup is already running.")
+	if p.state.Running || p.cacheClearing {
+		return errors.New("Wait for remote startup or cache cleanup to finish.")
 	}
 	if !reconnect && p.state.Session.Active {
 		return errors.New("Reconnect to or cancel the existing allocation before starting another.")
@@ -392,6 +397,15 @@ func (p *remoteController) launch(ctx context.Context, session RemoteSession, re
 	connection := remoteEndpoint{}
 	if len(endpoints) > 0 {
 		connection = endpoints[0]
+	}
+	if !reconnect {
+		release, err := lockRemoteCache(false)
+		if err != nil {
+			session.Active = false
+			_ = p.saveSession(session)
+			return err
+		}
+		defer release()
 	}
 	if err := writeJSON(filepath.Join(settingsDir(), "remote-profile.json"), session.Profile); err != nil {
 		return err

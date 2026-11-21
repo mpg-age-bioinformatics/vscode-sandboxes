@@ -20,7 +20,15 @@ Add an entry for Unreleased changes when their release is tagged.
 
 ## Unreleased
 
-No changes yet.
+- Show local Remote image-build cache disk usage at the bottom of both Remote
+  views, with Clear cache and automatic refresh after deployment or cleanup.
+  Clear only managed local build files; preserve HPC images/allocations, projects,
+  SSH credentials and shared Docker template storage. Use cross-process locks
+  to protect active builds/uploads, reject linked cache roots and avoid following
+  nested symlinks. Cover cleanup scope, disk allocation, concurrent use, process
+  crashes, HTTP guards and UI feedback with regressions.
+  Go/vet and UI checks passed on macOS; both installers rebuilt. Windows cache
+  locking and storage reporting were cross-compiled, without a native Windows run.
 
 <a id="v1-2-0"></a>
 
