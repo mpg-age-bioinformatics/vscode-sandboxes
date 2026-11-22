@@ -9,6 +9,7 @@ Add an entry for Unreleased changes when their release is tagged.
 
 | Release | Commit |
 | --- | --- |
+| [v1.2.1](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases/tag/v1.2.1) | [1c3da81313ba](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/commit/1c3da81313ba0c2efe059e083c1d480e08d7f2f3) |
 | [v1.2.0](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases/tag/v1.2.0) | [8d0feec1f682](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/commit/8d0feec1f682d54fce49fd8d2c74774037345112) |
 | [v1.1.2](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases/tag/v1.1.2) | [0bb8607cef8b](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/commit/0bb8607cef8b64200cf376705534e4b124257105) |
 | [v1.1.1](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases/tag/v1.1.1) | [0aa30746c6eb](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/commit/0aa30746c6eb8e3ebb37de5a64f43ca864f96d19) |
