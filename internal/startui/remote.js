@@ -187,6 +187,13 @@
   try{sandboxes=await(await catalogRequest('remote/sandboxes')).json();setOptions('remoteSandboxList',sandboxes.map(item=>({value:item.token,label:[item.jobID,item.queueState,item.profile.project,'Internet: '+(item.profile.network||'open')].join(' · ')})),'Select an allocation');element('remoteSandboxesStatus').textContent=sandboxes.length+' running or queued sandbox allocation(s). Attach opens the existing job; Stop cancels only the selected allocation.';}
   catch(error){clientError=error.message;}finally{requesting=false;render();}
  }
+ element('remoteAuthenticate').addEventListener('click',async()=>{
+  const button=element('remoteAuthenticate');button.disabled=true;
+  element('remoteAuthStatus').textContent='Connecting… Complete any SSH prompts in this window.';
+  try{await request('remote/authenticate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({login:element('remoteLogin').value.trim()})});element('remoteAuthStatus').textContent='SSH connection ready. You can now list images or running sandboxes.';}
+  catch(error){element('remoteAuthStatus').textContent=error.message;}
+  finally{button.disabled=false;}
+ });
  element('remoteListImages').addEventListener('click',listImages);
  for(const id of ['remoteLogin','remoteImagesDir','remoteStateDir','remoteModules','remoteModuleSetup'])element(id).addEventListener('change',()=>{if(connectMode){sandboxes=[];setOptions('remoteSandboxList',[],'Select an allocation');if(element('remoteLogin').value.trim())listSandboxes();else{element('remoteSandboxesStatus').textContent='Enter your SSH login above to find running sandboxes.';render();}}else if(element('remoteImageSource').value==='cached'){element('remoteCachedImage').value='';listImages();}});
  element('remoteListSandboxes').addEventListener('click',listSandboxes);
@@ -240,6 +247,36 @@
   if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
   event.preventDefault();const remote=event.key==='End'||(event.key!=='Home'&&id==='localTab');selectTab(remote);element(remote?'remoteTab':'localTab').focus();
  });
+ let authID='',authSending=false;
+ function closeAuth(){element('remoteAuthResponse').value='';authID='';if(element('remoteAuthDialog').open)element('remoteAuthDialog').close();}
+ async function pollAuthentication(){
+  try{if(visible||status.running||authID){
+   const data=await(await request('remote/auth/prompt')).json();
+   if(!data.prompt){if(!authSending)closeAuth();}
+   else if(data.prompt.id!==authID&&!authSending){
+    closeAuth();authID=data.prompt.id;
+    element('remoteAuthHost').textContent='Server: '+data.prompt.host;
+    element('remoteAuthPrompt').textContent=data.prompt.prompt;
+    element('remoteAuthError').textContent='';element('remoteAuthResponse').value='';
+    element('remoteAuthDialog').showModal();element('remoteAuthResponse').focus();
+   }
+  }}catch(error){if(authID){element('remoteAuthError').textContent='Authentication connection lost. Cancel and retry.';}}
+  finally{setTimeout(pollAuthentication,350);}
+ }
+ async function answerAuthentication(cancel){
+  if(!authID||authSending)return;
+  authSending=true;element('remoteAuthSubmit').disabled=true;
+  const payload={id:authID,response:cancel?'':element('remoteAuthResponse').value,cancel};
+  element('remoteAuthResponse').value='';
+  try{await request('remote/auth/answer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});closeAuth();}
+  catch(error){element('remoteAuthError').textContent=error.message;}
+  finally{payload.response='';authSending=false;element('remoteAuthSubmit').disabled=false;}
+ }
+ element('remoteAuthForm').addEventListener('submit',event=>{event.preventDefault();answerAuthentication(false);});
+ element('remoteAuthCancel').addEventListener('click',()=>answerAuthentication(true));
+ element('remoteAuthDialog').addEventListener('cancel',event=>{event.preventDefault();answerAuthentication(true);});
+ window.addEventListener?.('pagehide',()=>{element('remoteAuthResponse').value='';});
+ pollAuthentication();
  async function pollRemote(){if(loaded&&(visible||status.running||status.session?.active))await refresh();setTimeout(pollRemote,2000);}
  pollRemote();
 })();

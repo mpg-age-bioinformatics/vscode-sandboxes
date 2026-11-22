@@ -462,12 +462,37 @@ before a server is selected.
 
 ![Remote Connect to running sandboxes tab with the allocation picker, List running sandboxes, Attach, Stop allocation and activity export](docs/screenshots/remote-connect.jpg)
 
-Your site must permit noninteractive login-node SSH, Slurm jobs, additional `srun`
+Your site must permit login-node SSH (including reuse of an authenticated
+connection), Slurm jobs, additional `srun`
 steps in an existing allocation, and a rootless loopback SSH service in Apptainer.
 The server catalogs need Python 3 on the login node; image conversion uses
 `flock` on the compute node. No login-to-compute SSH or TCP forwarding is required. Test
 your alias in a terminal first, including host verification, SSH-agent setup and
-MFA; site-approved SSH multiplexing may be necessary. Custom ports/jump hosts
+MFA. If SSH requests a password, key passphrase or second-factor response, the
+launcher automatically shows an **SSH authentication** popup containing the server
+name and SSH's challenge text. Submit the response there; multi-step password/2FA
+exchanges open consecutive prompts. Cancel or Escape stops that sign-in. You can
+also use **Test SSH connection…** before listing images. Background allocation
+checks stay noninteractive; use Reconnect if their login session has expired.
+
+Responses exist only transiently in memory and travel through a short-lived,
+capability-protected loopback bridge to OpenSSH's askpass helper. They are never
+written to application files, preferences, activity exports, process arguments or
+environment variables. The input clears immediately on submission, cancellation
+or expiry; autocomplete is disabled. No Terminal window or credential storage is
+used. Host verification remains strict: verify new host fingerprints using your
+site's published information and establish the known-host entry before connecting.
+
+On macOS/Linux, catalogs, uploads, job operations and VS Code's login-node relay
+reuse a per-login OpenSSH control socket under `~/.ssh/vscode-sandboxes/`, protected
+by a mode-0700 directory. Other processes running as your account can also use
+this authenticated connection. It closes after ten minutes without channels;
+site timeouts may close it earlier. Subsequent launcher operations prompt again
+if necessary. This reuse requires site-approved SSH multiplexing. Windows OpenSSH
+has no ControlMaster support and can require separate authentication per command;
+the native Windows askpass/2FA flow has not been tested.
+
+Custom ports/jump hosts
 belong in SSH config. Module setup runs as your HPC account in the login and
 compute-node shells; include your site's shell initialization if needed. The compute node needs storage
 for uploaded archives/SIFs and permission to perform archive-to-SIF conversion.

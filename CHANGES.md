@@ -20,6 +20,21 @@ Add an entry for Unreleased changes when their release is tagged.
 
 ## Unreleased
 
+<a id="v1-2-1"></a>
+
+## v1.2.1 — 2026-11-22
+
+- Automatically show in-app SSH authentication popups for password, key
+  passphrase and multi-step 2FA requests from image catalogs, uploads and remote
+  job operations. Pass single-use responses through a temporary, capability-
+  protected loopback askpass bridge; never persist them or place them in process
+  arguments, environments or activity logs. Clear inputs on submission, cancel
+  and expiry. Keep strict host verification and disable agent forwarding.
+  Reuse authenticated OpenSSH connections on macOS/Linux for the VS Code relay.
+  Remove the Terminal sign-in script; keep an optional Test SSH connection action.
+  Verified that Raven's real password challenge opens in the macOS launcher.
+  Completing Raven's authenticated password/2FA exchange remains untested.
+
 - Show local Remote image-build cache disk usage at the bottom of both Remote
   views, with Clear cache and automatic refresh after deployment or cleanup.
   Clear only managed local build files; preserve HPC images/allocations, projects,
@@ -29,6 +44,39 @@ Add an entry for Unreleased changes when their release is tagged.
   crashes, HTTP guards and UI feedback with regressions.
   Go/vet and UI checks passed on macOS; both installers rebuilt. Windows cache
   locking and storage reporting were cross-compiled, without a native Windows run.
+
+- Add README screenshots of Local setup, private endpoints, Remote creation and
+  allocation connection, plus an overview figure at the beginning of the README.
+
+### Release validation
+
+The complete Go suite, Go vet and JavaScript UI regressions passed on macOS.
+The SSH helper process fixture passed password followed by 2FA, cancellation,
+bridge closure, single-use responses and no credential persistence; the askpass
+regressions also passed with Go's race detector. The actual Raven password popup
+was visually verified in the native launcher, without entering credentials.
+The cache cleanup and concurrency tests cover the local image-build cache;
+no user cache or HPC allocation was deleted for this release.
+
+Both downloads were rebuilt with 1.2.1 version metadata. The macOS DMG checksum,
+version, application layout, notices and embedded launcher were verified.
+The Windows executable was cross-compiled on macOS. A clean Windows 11
+installation/end-to-end run and native Windows password/2FA have not been tested.
+Full authenticated Raven login, interactive VS Code/notebook first-run checks and
+the dedicated graphical R session regression were not repeated for this release.
+The live R runtime/ICU tests from v1.2.0 remain documented in that release section.
+
+### SHA-256 checksums
+
+```
+a4287404cdfb2ba7e7bb5cfe0aeac7ef8862fcf3bcfe843933b6d84a14ea7542  VS-Code-Sandboxes.dmg
+670503ac5cb657212b75182643c2846d204d51d77d278b222d2c92c8d2869412  VS-Code-Sandboxes.exe
+b66258f4eeb4bb82f9da208d547c195d46f8535e96750d8720a43058e3c4cf0a  LICENSE
+6d3c58cbf8092ffce8589b92d8a5e71ec3ff9b03f609bdba6f3b81b68fb2222c  THIRD-PARTY-NOTICES.txt
+2f704641e01eaa72ef7d14bf8bb55fe895d97426e224d69e53dd4d77f69ec6b6  DISCLAIMER.txt
+```
+
+[Full changes](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/compare/v1.2.0...v1.2.1)
 
 <a id="v1-2-0"></a>
 

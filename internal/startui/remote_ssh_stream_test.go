@@ -40,7 +40,11 @@ func TestRemoteSSHStreamsLargeArguments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(arguments) > 512 || !strings.HasSuffix(string(arguments), "fixture\nbash -s --\n") {
+	socket, err := remoteControlPath("fixture")
+	if err != nil || !strings.Contains(string(arguments), "ControlPath="+socket) {
+		t.Fatal("SSH did not use shared login socket", err, string(arguments))
+	}
+	if len(arguments) > 768 || !strings.HasSuffix(string(arguments), "fixture\nbash -s --\n") {
 		t.Fatal("script payload entered the OS command line", len(arguments))
 	}
 }

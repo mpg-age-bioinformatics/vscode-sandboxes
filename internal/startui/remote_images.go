@@ -398,7 +398,16 @@ func uploadRemoteFileWithProgress(ctx context.Context, host, local, remote strin
 		return err
 	}
 	script := `set -eu; umask 077; target=` + remoteQuote(remote) + `; temporary="$target.part"; trap 'rm -f "$temporary"' EXIT; cat > "$temporary"; printf '%s  %s\n' ` + remoteQuote(hex.EncodeToString(digest.Sum(nil))) + ` "$temporary" | sha256sum -c - >/dev/null; mv "$temporary" "$target"`
-	cmd := exec.CommandContext(ctx, binary, "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ForwardAgent=no", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=30", host, "bash -c "+remoteQuote(script))
+	options, err := loginSSHOptions(host)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, binary, append(options, host, "bash -c "+remoteQuote(script))...)
+	closePrompts, err := configureSSHAskpass(cmd, host)
+	if err != nil {
+		return err
+	}
+	defer closePrompts()
 	hideWindow(cmd)
 	started := time.Now()
 	reader := &remoteTransferReader{source: source, log: log, name: filepath.Base(local), total: info.Size(), started: started, last: started, now: time.Now}

@@ -23,6 +23,36 @@ func remotePrerequisites(prerequisites *prerequisiteSetup) map[string]any {
 
 func (p *remoteController) serve(route string, w http.ResponseWriter, r *http.Request, local *logState, prerequisites *prerequisiteSetup) {
 	switch route {
+	case "remote/auth/prompt", "remote/auth/answer":
+		serveSSHAuthentication(route, w, r)
+
+	case "remote/authenticate":
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST required", http.StatusMethodNotAllowed)
+			return
+		}
+		var input struct {
+			Login string `json:"login"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil {
+			http.Error(w, "Invalid login", 400)
+			return
+		}
+		if !remoteHostPattern.MatchString(input.Login) {
+			http.Error(w, "Enter an SSH alias or user@hostname.", 400)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+		defer cancel()
+		if _, err := loginSSH(ctx, input.Login, "true"); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+
 	case "remote/cache", "remote/cache/clear":
 		p.serveLocalRemoteCache(w, r, route == "remote/cache/clear", local, prerequisites)
 
@@ -135,7 +165,7 @@ func (p *remoteController) serve(route string, w http.ResponseWriter, r *http.Re
 				return
 			}
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 		defer cancel()
 		var result any
 		var err error

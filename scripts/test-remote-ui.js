@@ -7,17 +7,21 @@ const html=fs.readFileSync(path.join(__dirname,'../internal/startui/window.html'
 const script=fs.readFileSync(path.join(__dirname,'../internal/startui/remote.js'),'utf8');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function harness(vscode=true,docker=false){
- const elements=new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,{value:'',textContent:'',hidden:false,disabled:false,listeners:{},attrs:{},children:[],appendChild(child){this.children.push(child);},addEventListener(type,fn){this.listeners[type]=fn;},setAttribute(key,value){this.attrs[key]=value;},focus(){this.focused=true;}}]));
+ const elements=new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,{value:'',textContent:'',hidden:false,disabled:false,listeners:{},attrs:{},children:[],open:false,showModal(){this.open=true;},close(){this.open=false;},appendChild(child){this.children.push(child);},addEventListener(type,fn){this.listeners[type]=fn;},setAttribute(key,value){this.attrs[key]=value;},focus(){this.focused=true;}}]));
  const get=id=>elements.get(id),calls=[];
  get('remotePanel').hidden=true;
  let holdCatalog=false,pendingCatalog=null;
  let cache={bytes:1073741824,entries:2,files:8,measured:true,inUse:false},clearError='';
  let status={running:false,session:{},phase:''},prerequisites={ssh:true,vscode,docker,supported:true,installing:false};
  const profile={login:'hpc',image:'/images/workspace.sif',project:'~/sandboxes',folders:'',stateDir:'~/state',partition:'cluster',cpus:1,memory:'8G',time:'02:00:00',gpus:0,apptainer:'apptainer',moduleNames:'apptainer',modules:'',waitMinutes:30};
- const window={},context=vm.createContext({URL,window,document:{body:{dataset:{}},getElementById:get,createElement(){return {};}},setTimeout(){},updateConnectionControls(){},fetch:async(route,options)=>{
+ const timers=new Map();let authPrompt=null;
+ const window={},context=vm.createContext({URL,window,document:{body:{dataset:{}},getElementById:get,createElement(){return {};}},setTimeout(fn){timers.set(fn.name,fn);},updateConnectionControls(){},fetch:async(route,options)=>{
   calls.push({route,body:options?.body&&JSON.parse(options.body)});
   if(route==='remote/cache')return {ok:true,json:async()=>cache};
   if(route==='remote/cache/clear'){if(clearError)return {ok:false,text:async()=>clearError};cache={...cache,bytes:0,entries:0,files:0};return {ok:true,json:async()=>({...cache,removedBytes:1073741824})};}
+  if(route==='remote/auth/prompt')return {ok:true,json:async()=>({prompt:authPrompt})};
+  if(route==='remote/auth/answer'){authPrompt=null;return {ok:true};}
+  if(route==='remote/authenticate')return {ok:true};
   if(route==='remote/recipe')return {ok:true,text:async()=>'%post\n image requirements'};
   if(route==='remote/start'){status={running:true,phase:'Waiting for job 42',session:{active:true,jobID:'42',profile},text:'Queued'};return {ok:true};}
   if(route==='remote/cancel'){status={running:false,phase:'Cancelled',session:{active:false}};return {ok:true};}
@@ -32,11 +36,26 @@ function harness(vscode=true,docker=false){
   return {ok:true,json:async()=>({profile,status,prerequisites})};
  }});
  vm.runInContext(script,context);
- return {get,calls,window,holdCatalog(){holdCatalog=true;},releaseCatalog(){pendingCatalog?.();},setCache(value){cache=value;},failClear(message){clearError=message;},setStatus(s){status=s;},async remote(){get('remoteTab').listeners.click();await tick();await tick();},async click(id){get(id).listeners.click();await tick();await tick();},async change(id){get(id).listeners.change();await tick();await tick();}};
+ return {get,calls,window,setPrompt(value){authPrompt=value;},async pollAuth(){await timers.get('pollAuthentication')();},holdCatalog(){holdCatalog=true;},releaseCatalog(){pendingCatalog?.();},setCache(value){cache=value;},failClear(message){clearError=message;},setStatus(s){status=s;},async remote(){get('remoteTab').listeners.click();await tick();await tick();},async click(id){get(id).listeners.click();await tick();await tick();},async change(id){get(id).listeners.change();await tick();await tick();}};
 }
 (async()=>{
  const h=harness();assert.equal(h.calls.length,0,'Local must remain default without querying HPC');
- await h.remote();assert(h.get('localPanel').hidden);assert.equal(h.get('remotePanel').hidden,false);assert.equal(h.get('remoteTab').attrs['aria-selected'],'true');
+ await h.remote();
+ await h.click('remoteAuthenticate');
+ assert.deepEqual(h.calls.find(c=>c.route==='remote/authenticate').body,{login:'hpc'});
+ assert(h.get('remoteAuthStatus').textContent.includes('SSH connection ready'));
+ for(const [id,prompt,response] of [['password','Password:','fixture-password'],['otp','Verification code:','fixture-code']]){
+  h.setPrompt({id,host:'raven.example.org',prompt});await h.pollAuth();
+  assert(h.get('remoteAuthDialog').open);assert.equal(h.get('remoteAuthPrompt').textContent,prompt);
+  h.get('remoteAuthResponse').value=response;h.get('remoteAuthForm').listeners.submit({preventDefault(){}});await tick();await tick();
+  assert.equal(h.get('remoteAuthResponse').value,'');assert.equal(h.get('remoteAuthDialog').open,false);
+  assert.equal(h.calls.filter(c=>c.route==='remote/auth/answer').at(-1).body.response,response);
+ }
+ h.setPrompt({id:'cancel',host:'raven.example.org',prompt:'Password:'});await h.pollAuth();h.get('remoteAuthResponse').value='discard-me';await h.click('remoteAuthCancel');
+ assert.equal(h.calls.filter(c=>c.route==='remote/auth/answer').at(-1).body.cancel,true);assert.equal(h.calls.filter(c=>c.route==='remote/auth/answer').at(-1).body.response,'');assert.equal(h.get('remoteAuthResponse').value,'');
+ h.setPrompt({id:'expiry',host:'raven.example.org',prompt:'Password:'});await h.pollAuth();h.get('remoteAuthResponse').value='discard-me';h.setPrompt(null);await h.pollAuth();assert.equal(h.get('remoteAuthResponse').value,'');assert.equal(h.get('remoteAuthDialog').open,false);
+ assert.equal(h.get('remoteAuthenticate').disabled,false);
+ assert(h.get('localPanel').hidden);assert.equal(h.get('remotePanel').hidden,false);assert.equal(h.get('remoteTab').attrs['aria-selected'],'true');
  assert.equal(h.get('remoteLogin').value,'hpc');assert.equal(h.get('remoteStart').disabled,false,'Remote requires no Docker');
  assert.equal(h.get('remoteInstallEditor').hidden,true);assert(h.get('remoteCurrentActions').hidden,'no allocation means no current-allocation actions');
  assert.equal(h.get('remoteProject').value,'~/sandboxes');assert.equal(h.get('remoteCPUs').value,1);assert.equal(h.get('remotePartition').value,'cluster');assert(!html.includes('id="remoteAccount"'));

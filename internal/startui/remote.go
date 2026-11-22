@@ -245,14 +245,33 @@ func loginSSH(ctx context.Context, host, script string, args ...string) (string,
 	}
 	input.WriteString("\n")
 	input.WriteString(script)
-	call := exec.CommandContext(ctx, binary, "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ForwardAgent=no", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=30", host, "bash -s --")
+	options, err := loginSSHOptions(host)
+	if err != nil {
+		return "", err
+	}
+	background, _ := ctx.Value(sshBackgroundProbe{}).(bool)
+	if background {
+		for i, option := range options {
+			if option == "BatchMode=no" {
+				options[i] = "BatchMode=yes"
+			}
+		}
+	}
+	call := exec.CommandContext(ctx, binary, append(options, host, "bash -s --")...)
+	if !background {
+		closePrompts, err := configureSSHAskpass(call, host)
+		if err != nil {
+			return "", err
+		}
+		defer closePrompts()
+	}
 	hideWindow(call)
 	call.Stdin = strings.NewReader(input.String())
 	var stdout, stderr strings.Builder
 	call.Stdout, call.Stderr = &stdout, &stderr
 	err = call.Run()
 	if err != nil {
-		return stdout.String(), fmt.Errorf("SSH to %s failed: %w. %s Use a terminal to complete first-use host verification, MFA, or SSH-agent setup.", host, err, strings.TrimSpace(stderr.String()))
+		return stdout.String(), fmt.Errorf("SSH to %s failed: %w. %s Complete any password or 2FA prompt in the launcher. Verify your SSH alias and known host key if authentication fails.", host, err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
 }
@@ -625,7 +644,11 @@ func prepareRemoteSSH(s RemoteSession, hostKey string) error {
 	if runtime.GOOS == "windows" {
 		quote = strconv.Quote
 	}
-	proxy := quote(filepath.ToSlash(binary)) + " -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ForwardAgent=no -o ConnectTimeout=15 " + s.Profile.Login + " " + quote(remoteCommand)
+	proxyOptions, err := loginSSHProxyOptions(s.Profile.Login, quote)
+	if err != nil {
+		return err
+	}
+	proxy := quote(filepath.ToSlash(binary)) + " " + proxyOptions + " " + s.Profile.Login + " " + quote(remoteCommand)
 	// OpenSSH expands percent tokens even inside quoted ProxyCommand arguments.
 	proxy = strings.ReplaceAll(proxy, "%", "%%")
 	text := fmt.Sprintf("Host %s\n  HostName 127.0.0.1\n  Port %d\n  User %s\n  ProxyCommand %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  IdentityAgent none\n  HostKeyAlias %s\n  UserKnownHostsFile %s\n  StrictHostKeyChecking yes\n  ForwardAgent no\n  ServerAliveInterval 30\n  ServerAliveCountMax 3\n", alias, s.Port, s.User, proxy, sshConfigQuote(filepath.ToSlash(filepath.Join(dir, "id_ed25519"))), alias, sshConfigQuote(filepath.ToSlash(known)))
@@ -764,6 +787,7 @@ func (p *remoteController) refreshStatus() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+		ctx = context.WithValue(ctx, sshBackgroundProbe{}, true)
 		result, err := p.ssh(ctx, s.Profile.Login, remoteAsset("probe.sh"), s.RunDir, s.Token, s.JobID)
 		p.Lock()
 		p.checking = false

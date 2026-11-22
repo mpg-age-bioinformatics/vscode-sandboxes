@@ -392,6 +392,12 @@ func EnsureHost(log io.Writer) error {
 // HandleHelper is used by generated shell launchers, with networking still
 // guarded by a per-sandbox deny-all rule while credentials are installed.
 func HandleHelper() bool {
+	if os.Getenv("VSCODE_SSH_ASKPASS_URL") != "" {
+		if err := runSSHAskpass(os.Args[len(os.Args)-1], os.Stdout); err != nil {
+			os.Exit(1)
+		}
+		return true
+	}
 	if len(os.Args) != 4 || (os.Args[1] != "--startup-apply" && os.Args[1] != "--startup-guard" && os.Args[1] != "--startup-ready") {
 		return false
 	}
