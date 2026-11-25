@@ -51,6 +51,7 @@ and [liability information](#user-responsibility-and-liability).
   - [Working in the sandbox](#working-in-the-sandbox)
 - [Troubleshooting](#troubleshooting)
 - [For developers](#for-developers)
+  - [Embed a Git tag in macOS and Windows builds](#embed-a-git-tag-in-macos-and-windows-builds)
 
 ## Available sandboxes
 
@@ -73,6 +74,10 @@ R, notebooks, command-line tools, and containerized workloads. It provides the
 code/data layout, VS Code tooling, and either Codex or Claude Code.
 
 ## Startup window and connection settings
+
+Sandbox editor launches disable VS Code Workspace Trust for that session, so
+new sandbox folders open with all editor features enabled. Workspace Trust is
+separate from sandbox permissions and internet access.
 
 Open **VS Code - Sandboxes** and select the **Project folder** first. Type
 its path or click **Browse…** to choose or create a folder. Editing the field does
@@ -204,14 +209,22 @@ Initial setup requires the displayed VS Code Marketplace/CDN hosts.
 
 Agent web-tool settings are applied inside both Local and Remote containers
 before VS Code opens, including on restart/reconnect after endpoint settings.
-Selected sites configures Codex's `tools.web_search.allowed_domains` and a Claude
-Code `PreToolUse` hook that constrains `WebSearch.allowed_domains` and checks
+Selected sites disables Codex hosted web access (`web_search="disabled"` and
+`tools.web_search=false`). A live extension trace showed that domain filters did
+not constrain Code Mode open-page calls. Use sandbox commands to retrieve allowed
+URLs under the transport policy. Codex hosted app/connector tools are disabled
+too (`features.apps=false` and disabled `apps._default` tools): a separate
+connected-app search service otherwise remained available after built-in search
+was disabled. Other connected-app tools are therefore unavailable in restricted/
+offline mode. Open restores their previous configuration.
+A Claude Code `PreToolUse` hook constrains
+`WebSearch.allowed_domains` and checks
 `WebFetch` destinations. Existing search-off preferences and approval prompts
 remain in effect. No internet disables these hosted web tools. Switching to
 Open restores launcher-managed Codex/Chat settings and removes the Claude hook.
 Only sandbox home configuration is changed; host agent credentials are untouched.
 
-Hosted search uses domain-level filters, which include subdomains (and the base
+Supported Claude/Chat hosted search uses domain-level filters, which include subdomains (and the base
 domain when translating a wildcard). They are **not an identical host/port
 firewall**. Port-specific/IP entries are omitted from hosted search; no supported
 domains, or more than 100 translated domains, disables hosted search. VS Code
@@ -1081,6 +1094,78 @@ The R sandbox prepares vscode-R's exact bundled `sess` revision in the remote
 extension's private managed library before opening VS Code. Interactive R startup
 rechecks it after extension updates; completed revisions require no reinstall or
 installation prompt. Editor infrastructure stays separate from project renv packages.
+
+### Embed a Git tag in macOS and Windows builds
+
+The packaging scripts embed the output of `git describe --tags --always --dirty`
+in the launcher executable. The startup window displays it as its Git version
+label. This identifies the launcher build packaged in the macOS DMG or Windows
+EXE; it does not tag the Docker or Apptainer workload images. Installed launchers
+need neither Git nor network access to display the label.
+
+Finish the source and documentation changes, stage all intended files (including
+new files), and commit them before tagging. For example, using `v1.2.2` as the
+next release tag:
+
+```bash
+git status
+git add <files-to-include>
+git commit -m "Prepare v1.2.2"
+git tag -a v1.2.2 -m "Release v1.2.2"
+git describe --tags --always --dirty
+```
+
+The last command should print exactly `v1.2.2`. A suffix such as
+`-2-gabcdef0` means the checkout is two commits after the tag; `-dirty` means
+tracked files have uncommitted changes. Creating a tag does not update an
+existing executable: build again after tagging.
+
+Build each platform from a separate clean checkout of the tag. The repository
+tracks its release DMG and EXE, so replacing them with
+`scripts/create-release.sh` can make a subsequent build include `-dirty`.
+The following commands use separate worktrees and write the downloads outside
+the repository. Run them from the original repository root, and choose unused
+output paths because the packaging scripts refuse to overwrite existing files.
+
+For macOS, build on a Mac with Go and the Xcode command-line tools installed:
+
+```bash
+git worktree add --detach ../vscode-sandboxes-v1.2.2-macos v1.2.2
+(
+  cd ../vscode-sandboxes-v1.2.2-macos
+  git describe --tags --always --dirty  # Must print v1.2.2
+  ./sandbox-launcher/scripts/build-macos-dmg.sh /tmp/VS-Code-Sandboxes-v1.2.2.dmg
+  hdiutil verify /tmp/VS-Code-Sandboxes-v1.2.2.dmg
+)
+```
+
+For Windows, use Bash with Git and Go installed. The script cross-compiles the
+Windows x86-64 executable, so it can also run on macOS or Linux. Install the
+required resource generator first:
+
+```bash
+go install github.com/tc-hib/go-winres@v0.3.3
+git worktree add --detach ../vscode-sandboxes-v1.2.2-windows v1.2.2
+(
+  cd ../vscode-sandboxes-v1.2.2-windows
+  git describe --tags --always --dirty  # Must print v1.2.2
+  ./sandbox-launcher/scripts/build-windows-exe.sh /tmp/VS-Code-Sandboxes-v1.2.2.exe
+)
+```
+
+Install the app from the new DMG or run the new EXE on Windows, then confirm the
+startup window shows `v1.2.2`. Existing installations retain their embedded
+version until replaced. The Git label is separate from Windows file/product
+version metadata, which the resource-generation script sets explicitly.
+
+To share the release, push the source commit and tag, then upload the tested
+downloads to the GitHub Release for that tag. A local build does not require a
+push, and the packaging scripts do not publish anything:
+
+```bash
+git push origin HEAD
+git push origin v1.2.2
+```
 
 ## User responsibility and liability
 

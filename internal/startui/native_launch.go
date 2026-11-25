@@ -423,7 +423,7 @@ func openSandboxEditor(name, workspace, slug string, log io.Writer) error {
 		if err != nil || !strings.HasPrefix(uri, "vscode-remote://dev-container+") || strings.ContainsAny(uri, "\r\n") {
 			return fmt.Errorf("Invalid development-container URI: %s", uri)
 		}
-		return run("--folder-uri", uri)
+		return run("--disable-workspace-trust", "--folder-uri", uri)
 	}
 	authority := "ssh-remote+" + name + ".sbx"
 	for _, extension := range []string{"ms-python.python", "ms-python.vscode-pylance", "ms-toolsai.jupyter", "REditorSupport.r", "openai.chatgpt", "anthropic.claude-code"} {
@@ -449,5 +449,5 @@ func openSandboxEditor(name, workspace, slug string, log io.Writer) error {
 			return fmt.Errorf("VS Code extension was not installed in %s: %s", authority, extension)
 		}
 	}
-	return run("--remote", authority, workspace)
+	return run("--disable-workspace-trust", "--remote", authority, workspace)
 }

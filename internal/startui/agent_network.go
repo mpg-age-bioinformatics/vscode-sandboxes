@@ -54,6 +54,6 @@ func applyLocalAgentNetwork(name, workspace string, s Selection, log io.Writer) 
 			return fmt.Errorf("Configure development-container web tools: %w", err)
 		}
 	}
-	fmt.Fprintln(log, "Agent web policy applied. Hosted search uses domain filters including subdomains; port/IP rules are omitted. Continue hosted search is disabled in restricted/offline modes. VS Code Chat Anthropic BYOK search is configured; broader Chat fetch/browser filtering requires desktop-wide policy. Other providers/MCP tools need separate controls.")
+	fmt.Fprintln(log, "Agent web policy applied. Codex built-in web and hosted app/connector tools are disabled in restricted/offline modes, as is Continue hosted search. Direct URL requests follow sandbox networking. Claude/Chat supported search filters include subdomains and omit port/IP entries. Broader Chat filtering needs desktop-wide policy; other providers/MCP tools need separate controls. Reload VS Code and start new conversations to apply settings to running agents.")
 	return nil
 }

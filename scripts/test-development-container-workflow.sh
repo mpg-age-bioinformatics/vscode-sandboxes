@@ -60,11 +60,11 @@ for language in python r; do
  grep -F 'shell ' "$WORKFLOW_LOG" >/dev/null
  grep -F 'bash code/.sandbox/start-development-container.sh both' "$WORKFLOW_LOG" >/dev/null
  grep -F 'code --install-extension ms-vscode-remote.remote-containers' "$WORKFLOW_LOG" >/dev/null
- grep -F 'code --folder-uri vscode-remote://dev-container+' "$WORKFLOW_LOG" >/dev/null
+ grep -F 'code --disable-workspace-trust --folder-uri vscode-remote://dev-container+' "$WORKFLOW_LOG" >/dev/null
  ! grep -E 'sbx template|podman|sbx exec.*--user root' "$WORKFLOW_LOG" >/dev/null
  : > "$WORKFLOW_LOG"
  if FAIL_CONTAINER=1 bash "$project/code/.sandbox/run-$language-sandbox.sh" codex >/dev/null 2>&1;then echo 'Failed container startup was accepted' >&2;exit 1;fi
- ! grep -F 'code --folder-uri' "$WORKFLOW_LOG" >/dev/null
+ ! grep -F 'code --disable-workspace-trust --folder-uri' "$WORKFLOW_LOG" >/dev/null
  : > "$WORKFLOW_LOG"
  if VSCODE_SANDBOX_STARTUP_HELPER="$test_root/bin/startup-helper" FAIL_POLICY=1 bash "$project/code/.sandbox/run-$language-sandbox.sh" codex >/dev/null 2>&1;then echo 'Failed policy setup was accepted' >&2;exit 1;fi
  grep -F -- '--deny-network **' "$WORKFLOW_LOG" >/dev/null

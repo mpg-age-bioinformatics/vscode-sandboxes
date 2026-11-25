@@ -74,7 +74,9 @@ def value(v):
 def policy(profile):
     mode = profile.get('network') or 'open'
     if mode not in ('open','restricted','none'): raise ValueError('Invalid network mode')
-    sites = list(dict.fromkeys(x.lower().strip().rstrip('.') for x in re.split(r'[\s,]+',profile.get('sites','')) if x.strip()))
+    raw_sites=profile.get('sites','')
+    if isinstance(raw_sites,list):raw_sites=','.join(raw_sites)
+    sites = list(dict.fromkeys(x.lower().strip().rstrip('.') for x in re.split(r'[\s,]+',raw_sites) if x.strip()))
     domains = []
     for site in sites:
         # Hosted search cannot faithfully represent a port or IP rule. Omit it
@@ -132,11 +134,12 @@ RESTORE=object()
 
 def apply(profile):
     p=policy(profile);home=Path.home().resolve();mode=p['network'];restricted=mode!='open'
-    config=home/'.codex/config.toml'
-    previous=tomllib.loads(config.read_text()).get('web_search','cached') if config.exists() else 'cached'
-    marker=config.with_name('.config.toml.sandbox-web-original.json')
-    if marker.exists():previous=json.loads(marker.read_text()).get('web_search',{}).get('value') or 'cached'
-    codex={'web_search':previous if p['domains'] else 'disabled','tools/web_search':{'allowed_domains':p['domains']}}
+    # Hosted search-domain filters did not constrain Code Mode open-page calls
+    # in the installed extension. Disable the entire hosted surface in restricted
+    # and offline modes; direct sandbox fetches remain transport-enforced.
+    codex={'web_search':'disabled','tools/web_search':False,
+           'features/apps':False,'apps/_default/enabled':False,
+           'apps/_default/default_tools_enabled':False,'apps/_default/open_world_enabled':False}
     patch(home/'.codex/config.toml',codex if restricted else {k:RESTORE for k in codex},toml=True)
     claude=home/'.claude';claude.mkdir(mode=0o700,exist_ok=True)
     atomic(claude/'.sandbox-network.json',json.dumps(p)+'\n')

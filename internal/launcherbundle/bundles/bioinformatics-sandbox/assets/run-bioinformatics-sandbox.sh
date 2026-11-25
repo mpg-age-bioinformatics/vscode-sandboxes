@@ -193,4 +193,4 @@ for extension in "${required_extensions[@]}" Continue.continue; do
     exit 1
   fi
 done
-native_exec "$code_cli" --remote "$remote_authority" "$sandbox_project_root"
+native_exec "$code_cli" --disable-workspace-trust --remote "$remote_authority" "$sandbox_project_root"

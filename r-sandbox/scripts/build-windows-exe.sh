@@ -14,11 +14,12 @@ go_winres="${GO_WINRES:-$(go env GOPATH)/bin/go-winres}"
 [[ -f "$icon_path" ]] || { echo "Error: icon source is unavailable: $icon_path" >&2; exit 1; }
 
 cd "$repository_root"
+source "$repository_root/scripts/build-version.sh"
 "$go_winres" simply --arch amd64 --out "$sandbox_dir/windows/rsrc" \
   --product-version 1.0.1 --file-version 1.0.1 --manifest cli \
   --file-description "R Sandbox launcher" --product-name "R Sandbox" \
   --original-filename "R-Sandbox.exe" --icon "$icon_path"
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
-  -ldflags="-s -w -H windowsgui" \
+  -ldflags="-s -w -H windowsgui $sandbox_version_ldflags" \
   -o "$output_path" "./r-sandbox/windows"
 echo "$output_path"

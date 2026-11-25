@@ -163,7 +163,7 @@ func TestRemoteLaunchAndReconnectThroughVerifiedContainer(t *testing.T) {
 		t.Fatal("direct compute-node transport configured", string(managed))
 	}
 	calls, _ := os.ReadFile(log)
-	for _, part := range []string{"--install-extension ms-vscode-remote.remote-ssh", "--remote ssh-remote+vscode-sandboxes-" + s.Token + " " + s.Profile.Project} {
+	for _, part := range []string{"--install-extension ms-vscode-remote.remote-ssh", "--disable-workspace-trust --remote ssh-remote+vscode-sandboxes-" + s.Token + " " + s.Profile.Project} {
 		if !bytes.Contains(calls, []byte(part)) {
 			t.Fatal("wrong extension or workspace host", string(calls))
 		}

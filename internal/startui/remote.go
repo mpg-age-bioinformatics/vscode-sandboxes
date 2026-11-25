@@ -725,7 +725,7 @@ func openRemoteEditor(ctx context.Context, alias string, log io.Writer, profile 
 		return err
 	}
 	commands := [][]string{{"--install-extension", "ms-vscode-remote.remote-ssh"}}
-	commands = append(commands, []string{"--remote", "ssh-remote+" + alias, projectPath})
+	commands = append(commands, []string{"--disable-workspace-trust", "--remote", "ssh-remote+" + alias, projectPath})
 	for _, args := range commands {
 		if err := ctx.Err(); err != nil {
 			return err

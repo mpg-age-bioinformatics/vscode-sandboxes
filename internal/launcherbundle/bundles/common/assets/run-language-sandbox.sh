@@ -91,4 +91,4 @@ native_exec "$code_cli" --install-extension ms-vscode-remote.remote-containers
 folder_uri="$(native_exec sbx exec --workdir "$sandbox_project_root" "$sandbox_name" node code/.sandbox/development-container.js uri "$sandbox_name" | tail -n 1)"
 case "$folder_uri" in vscode-remote://dev-container+*) ;; *) echo 'Error: invalid Dev Containers connection URI.' >&2; exit 1 ;; esac
 echo "VS Code target: $language development container inside $sandbox_name"
-native_exec "$code_cli" --folder-uri "$folder_uri"
+native_exec "$code_cli" --disable-workspace-trust --folder-uri "$folder_uri"

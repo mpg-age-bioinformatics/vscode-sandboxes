@@ -78,7 +78,7 @@ startup rather than silently omitting web-tool settings.
 
 | Agent | Selected sites | No internet |
 | --- | --- | --- |
-| Codex | `tools.web_search.allowed_domains`, preserving the original search mode (including disabled) | `web_search="disabled"` |
+| Codex | Built-in web disabled with `web_search="disabled"` and `tools.web_search=false`; hosted Apps disabled with `features.apps=false` and disabled `apps._default` tools | Same hosted-web/Apps disable |
 | Claude Code | A `PreToolUse` command hook rewrites/intersects `WebSearch.allowed_domains`; `WebFetch` checks the requested URL against exact/wildcard hosts and ports | Hook exits 2 for both web tools |
 | Continue 2.0.0 | Revision-3 guard disables the shared hosted-search function used by `search_web` and `@web`; direct fetch remains transport-controlled | Same guard denies hosted search |
 | VS Code Chat | Remote Machine settings supply `github.copilot.chat.anthropic.tools.websearch.allowedDomains` for Anthropic BYOK search | Anthropic BYOK search disabled |
@@ -98,7 +98,10 @@ modified. Old revision-2 packages are upgraded on startup/reconnect.
 Search-domain filters include subdomains, and wildcard translation also includes
 the base domain. They cannot represent exact network-policy semantics. Explicit
 port and IP rules are omitted; an empty translated set or more than 100 domains
-disables Codex/Claude hosted search. Claude's initial WebFetch URL check does not
+disables Claude hosted search. Codex hosted web is always disabled in restricted
+and offline modes because a live Code Mode trace retrieved CNN and SAPO pages
+outside the configured domain list. The earlier mock-server test verified filter
+serialization only and did not establish complete hosted-tool enforcement. Claude's initial WebFetch URL check does not
 claim to control provider-side redirects. Chat provider tools other than the
 configured Anthropic search, MCP/plugins, provider-managed remote tools and
 browser services are not covered by these search filters. The general VS Code fetch/browser filter is APPLICATION-scoped in the tested
@@ -108,6 +111,16 @@ settings and tool runtime versions can affect editor-side behavior. All of these
 are writable by the sandbox user: this is application configuration, not a
 tamper-resistant service boundary. Direct sandbox egress remains independently
 enforced by Docker or the Apptainer network namespace/gateway.
+
+An additional live trace, after built-in search was disabled, showed
+`mcp__codex_apps__search_service_web_run` fetching an unlisted site. The helper
+therefore disables the entire hosted Apps integration with `features.apps=false`,
+`apps._default.enabled=false`, `apps._default.default_tools_enabled=false` and
+`apps._default.open_world_enabled=false`. Other connected-app tools are also
+unavailable in restricted/offline modes. An installed-extension app-server probe
+confirmed the effective flag and that its MCP runtime inventory contained no
+`codex_apps` server. Reload the extension and replace existing conversations to
+discard their old tool catalogs.
 
 References: [Codex configuration](https://learn.chatgpt.com/docs/config-file/config-reference),
 [search domain semantics](https://developers.openai.com/api/docs/guides/tools-web-search#domain-filtering),

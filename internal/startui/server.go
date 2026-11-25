@@ -506,5 +506,8 @@ try {
 
 func startupPage() []byte {
 	data, _ := content.ReadFile("window.html")
-	return []byte(strings.ReplaceAll(string(data), "__DISCLAIMER_TEXT__", html.EscapeString(licensing.Disclaimer)))
+	return []byte(strings.NewReplacer(
+		"__DISCLAIMER_TEXT__", html.EscapeString(licensing.Disclaimer),
+		"__BUILD_VERSION__", html.EscapeString(BuildVersion),
+	).Replace(string(data)))
 }

@@ -21,6 +21,32 @@ Add an entry for Unreleased changes when their release is tagged.
 
 ## Unreleased
 
+- Open local and remote sandbox editor sessions with Workspace Trust disabled,
+  preventing VS Code Restricted Mode from disabling extensions in new sandboxes.
+  This applies to the launched session without changing global user settings.
+
+- Show the build's Git tag/revision at the lower left of every launcher screen.
+  Stamp macOS and Windows binaries at build time, include the development/dirty
+  suffix, and retain a development fallback without a runtime Git dependency.
+
+- Disable Codex's hosted Apps integration in Selected sites/No internet in
+  addition to built-in web search. A new live conversation used
+  `mcp__codex_apps__search_service_web_run` after built-in search was disabled.
+  Set `features.apps=false` and disable default app/tool/open-world access;
+  preserve original values for Open-mode restore. An installed-extension
+  app-server check verified disabled Apps and no `codex_apps` MCP inventory.
+  A live read-only test using the installed extension backend returned
+  `HOSTED_TOOL_UNAVAILABLE` with no hosted web events. Current Local settings
+  were updated; the live Remote refresh timed out and needs a reachable server.
+
+- Disable Codex hosted web access in Selected sites as well as No internet.
+  A live extension trace showed Code Mode opening CNN/SAPO URLs outside the
+  configured search domains. Domain-filter serialization alone was not a
+  sufficient enforcement test. Set both `web_search="disabled"` and
+  `tools.web_search=false`, preserve original settings for Open-mode restore,
+  and direct URL retrieval through sandbox commands. Configuration regressions
+  and a mock Responses capture verify that new CLI requests omit hosted search.
+
 - Apply agent web-tool policy from Selected sites for both Local and Remote,
   including existing project restarts and allocation reconnects. Configure
   Codex domain filters, Claude search/fetch hooks, supported Chat domain

@@ -7,7 +7,8 @@ trap 'rm -rf -- "$build_root"' EXIT
 cd "$repository_root"
 export GOCACHE="${GOCACHE:-${TMPDIR:-/tmp}/vscode-sandbox-go-cache}"
 export CLANG_MODULE_CACHE_PATH="${TMPDIR:-/tmp}/vscode-sandbox-clang-cache"
-go build -trimpath -o "$build_root/Sandbox Desktop" ./cmd/sandbox-desktop
+source "$repository_root/scripts/build-version.sh"
+go build -trimpath -ldflags="$sandbox_version_ldflags" -o "$build_root/Sandbox Desktop" ./cmd/sandbox-desktop
 swiftc -O -module-cache-path "$CLANG_MODULE_CACHE_PATH" internal/desktop/Window.swift -o "$build_root/Sandbox Window"
 install_helpers() {
   local destination="$1" binary temporary_binary
