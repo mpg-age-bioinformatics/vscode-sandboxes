@@ -87,7 +87,13 @@ class NetworkTests(unittest.TestCase):
             stream.shutdown(socket.SHUT_WR)
             data = bytearray()
             while True:
-                block = stream.recv(65536)
+                try:
+                    block = stream.recv(65536)
+                except ConnectionResetError:
+                    # Linux can reset a closed socket with unread pipelined input.
+                    # Preserve the response so callers still verify rejection
+                    # and that the second request was never forwarded.
+                    return bytes(data)
                 if not block:
                     return bytes(data)
                 data.extend(block)

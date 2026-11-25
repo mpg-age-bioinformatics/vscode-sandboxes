@@ -308,12 +308,14 @@ class WatchdogTests(unittest.TestCase):
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
             for result in executor.map(register, allocations):
                 self.assertEqual(result.returncode, 0, result.stderr)
-        deadline = time.monotonic() + 10
+        # Registrations arriving after the daemon's snapshot are checked on its
+        # next production poll, even when earlier registrations are already gone.
+        deadline = time.monotonic() + w.POLL_SECONDS + 10
         while time.monotonic() < deadline:
             status = w.read_json(root / 'status.json') if (root / 'status.json').exists() else {}
             if status.get('running') is False: break
             time.sleep(0.05)
-        else: self.fail('Watchdog did not exit after scheduler became empty')
+        else: self.fail('Watchdog did not exit after scheduler became empty:\n' + (root / 'watchdog.log').read_text())
         log = (root / 'watchdog.log').read_text()
         self.assertEqual(log.count('Watchdog started'), 1, log)
         with w.registry(root) as entries: self.assertFalse(entries)
