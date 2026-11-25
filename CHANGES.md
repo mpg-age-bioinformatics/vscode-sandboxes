@@ -9,6 +9,7 @@ Add an entry for Unreleased changes when their release is tagged.
 
 | Release | Commit |
 | --- | --- |
+| [v1.2.2](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases/tag/v1.2.2) | [85ab81823317](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/commit/85ab818233179a7eec1fa732a11504e5c1b3dfda) |
 | [v1.2.1](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases/tag/v1.2.1) | [1c3da81313ba](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/commit/1c3da81313ba0c2efe059e083c1d480e08d7f2f3) |
 | [v1.2.0](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases/tag/v1.2.0) | [8d0feec1f682](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/commit/8d0feec1f682d54fce49fd8d2c74774037345112) |
 | [v1.1.2](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases/tag/v1.1.2) | [0bb8607cef8b](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/commit/0bb8607cef8b64200cf376705534e4b124257105) |
@@ -151,6 +152,31 @@ operation and native password/2FA completion have not been tested. Interactive
 VS Code/notebook first-run checks, a new HPC image build and completed Raven
 password/2FA authentication were not repeated for this release. Final validation
 results and artifact checksums are recorded in the release documentation follow-up.
+
+### Release validation
+
+The complete Go suite (`go test ./... -timeout=240s`), Go vet, all JavaScript UI
+regressions and the release security fixtures passed on macOS arm64. The fixtures
+cover 14 watchdog tests, 7 network tests, directory retries, Continue distribution,
+remote editor provisioning and agent web policy. Source and rebuilt Windows
+binary vulnerability scans reported no vulnerabilities with govulncheck v1.10.0.
+
+The DMG integrity, application plist, Finder installation metadata, Applications
+shortcut and bundled license/notice/disclaimer files were verified. Both Go
+binaries identify release source commit `85ab818233179a7eec1fa732a11504e5c1b3dfda` with
+`vcs.modified=false`. The packaged macOS app was launched from the DMG and visually
+verified to show `v1.2.2` in the footer bar attached to the bottom of the UI.
+This startup check did not launch or modify any sandbox allocation.
+
+### SHA-256 checksums
+
+```
+f52c922f4dc656015be10d706e632b4419c8a72f1ad3065b9c6f63608448f9f8  VS-Code-Sandboxes.dmg
+b2c30cae2302cbf91cfd5d20ade656a08ddae68c2ef77b096879861284403c2e  VS-Code-Sandboxes.exe
+b66258f4eeb4bb82f9da208d547c195d46f8535e96750d8720a43058e3c4cf0a  LICENSE
+d432c79c907d097b4f204c0c72bc607ae1fd133ced15f0a7d24dd3691f813309  THIRD-PARTY-NOTICES.txt
+2f704641e01eaa72ef7d14bf8bb55fe895d97426e224d69e53dd4d77f69ec6b6  DISCLAIMER.txt
+```
 
 [Full changes](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/compare/v1.2.1...v1.2.2)
 
