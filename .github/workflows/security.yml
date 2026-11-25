@@ -7,9 +7,6 @@ permissions:
 jobs:
   security:
     runs-on: ubuntu-latest
-    env:
-      # Mount-policy fixtures need project paths outside reserved /tmp trees.
-      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -20,6 +17,8 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
+      - name: Keep fixture projects outside reserved temporary paths
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Go regressions and vet
         run: |
           go test ./... -timeout=240s
