@@ -8,7 +8,7 @@ go_winres="${GO_WINRES:-$(go env GOPATH)/bin/go-winres}"
 cd "$repository_root"
 source "$repository_root/scripts/build-version.sh"
 "$go_winres" simply --arch amd64 --out "$repository_root/sandbox-launcher/windows/rsrc" \
-  --product-version 1.2.1 --file-version 1.2.1 --manifest cli \
+  --product-version 1.2.2 --file-version 1.2.2 --manifest cli \
   --file-description "VS Code - Sandboxes" --product-name "VS Code - Sandboxes" \
   --original-filename "VS-Code-Sandboxes.exe" --icon "$repository_root/sandbox-launcher/assets/SandboxesIcon-1024.png"
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -H windowsgui $sandbox_version_ldflags" -o "$output" ./sandbox-launcher/windows

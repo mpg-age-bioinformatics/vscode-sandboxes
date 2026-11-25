@@ -19,13 +19,16 @@ Add an entry for Unreleased changes when their release is tagged.
 | [v1.0.0](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases/tag/v1.0.0) | [2cbdb003765f](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/commit/2cbdb003765f260238c04935a0581f6cd16f0c5d) |
 | [v0.0.1](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/releases/tag/v0.0.1) | [414357ae1bc4](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/commit/414357ae1bc422fe20ad2151e278b4d3c8085723) |
 
-## Unreleased
+<a id="v1-2-2"></a>
+
+## v1.2.2 — 2026-11-25
 
 - Open local and remote sandbox editor sessions with Workspace Trust disabled,
   preventing VS Code Restricted Mode from disabling extensions in new sandboxes.
   This applies to the launched session without changing global user settings.
 
-- Show the build's Git tag/revision at the lower left of every launcher screen.
+- Anchor the build's Git tag/revision and issue link in a footer bar flush with
+  the bottom edge of every launcher screen.
   Stamp macOS and Windows binaries at build time, include the development/dirty
   suffix, and retain a development fallback without a runtime Git dependency.
 
@@ -135,6 +138,21 @@ checks passed. Restricted proxy use, blocked direct egress, offline isolation an
 extension registration passed. The tests cancelled only their own allocations.
 Native Windows operation, the GitHub workflow on hosted runners and completed
 Raven password/2FA authentication are not claimed by these checks.
+
+### Release packaging and testing scope
+
+The 1.2.2 downloads are built from separate clean checkouts of the release tag,
+with matching macOS bundle and Windows file/product version metadata. The build
+label is embedded as `v1.2.2`, without a development or dirty suffix.
+
+The macOS DMG is built on macOS (Apple silicon); the Windows x86-64 executable
+is cross-compiled on that host. Native Windows 11 installation, end-to-end
+operation and native password/2FA completion have not been tested. Interactive
+VS Code/notebook first-run checks, a new HPC image build and completed Raven
+password/2FA authentication were not repeated for this release. Final validation
+results and artifact checksums are recorded in the release documentation follow-up.
+
+[Full changes](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/compare/v1.2.1...v1.2.2)
 
 <a id="v1-2-1"></a>
 
