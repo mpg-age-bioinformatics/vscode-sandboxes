@@ -69,6 +69,44 @@ class WatchdogTests(unittest.TestCase):
         entry, expired = w.advance(entry, self.observation(entry), 86500)
         self.assertTrue(expired)
 
+    def test_untrusted_future_and_nonfinite_times_never_extend_idle(self):
+        for index, bad in enumerate((float('inf'), float('nan'), 999999999),1):
+            entry = self.allocation(index)
+            observation = self.observation(entry, event=bad)
+            observation['readyAt'] = bad
+            entry, expired = w.advance(entry, observation, 100)
+            self.assertEqual(entry['idleSince'], 100)
+            entry, expired = w.advance(entry, observation, 100+48*3600)
+            self.assertTrue(expired)
+
+    def test_host_anchor_ignores_runtime_metadata_and_fake_sshd(self):
+        entry = self.allocation(); run = pathlib.Path(entry['runDir'])
+        (run/'runtime').mkdir(); (run/'watchdog-policy').write_text('host-anchored-v2')
+        proc = self.root/'proc'; proc.mkdir()
+        self.process(proc, 5, 1, 'container launcher')
+        self.process(proc, 10, 5, 'sshd -D')
+        self.process(proc, 11, 10, 'sshd: '+w.pwd.getpwuid(os.getuid()).pw_name+'@notty')
+        (proc/'10/ns').mkdir(); (proc/'10/ns/pid').symlink_to('pid:[42]')
+        w.atomic(run/'runtime/ssh-server.json', dict(token=entry['token'], jobID=entry['jobID'], pid=10,start='77',user=w.pwd.getpwuid(os.getuid()).pw_name,readyAt=100))
+        with self.assertRaises(ValueError): w.probe(run,entry['token'],entry['jobID'],proc)
+        w.anchor_server(run,5,proc)
+        before=w.probe(run,entry['token'],entry['jobID'],proc)
+        self.assertTrue(before['hostAnchored']);self.assertEqual(before['connections'],1)
+        w.atomic(run/'runtime/ssh-server.json', {'pid':999,'readyAt':float('inf')})
+        w.atomic(run/'runtime/ssh-activity.json', {'lastAuthenticatedAt':float('inf')})
+        self.process(proc,12,11,'bash')
+        self.process(proc,13,12,'sshd: '+w.pwd.getpwuid(os.getuid()).pw_name+'@notty')
+        after=w.probe(run,entry['token'],entry['jobID'],proc)
+        self.assertEqual(after['connections'],1);self.assertEqual(after['lastAuthenticatedAt'],0)
+        self.assertEqual(after['readyAt'],before['readyAt'])
+        with patch.dict(os.environ, {'SSH_CONNECTION':'127.0.0.1 123 127.0.0.1 22'}):
+            with patch.object(w.time,'time',return_value=200):
+                w.connected_host(run,entry['token'],entry['jobID'])
+        observed=w.probe(run,entry['token'],entry['jobID'],proc)
+        self.assertEqual(observed['lastAuthenticatedAt'],200)
+        self.assertTrue((run/'host-activity.json').is_file())
+
+
     def test_authenticated_hook_is_per_allocation_and_monotonic(self):
         a, b = self.allocation(), self.allocation(2)
         with patch.dict(os.environ, {}, clear=True):
@@ -147,6 +185,7 @@ class WatchdogTests(unittest.TestCase):
         fields = ['S', str(parent)] + ['0'] * 17 + [start]
         (directory / 'stat').write_text(str(pid) + ' (sshd) ' + ' '.join(fields))
         (directory / 'cmdline').write_bytes(title.encode() + b'\0')
+        (directory / 'exe').symlink_to('/usr/sbin/sshd' if title.startswith('sshd') else '/usr/bin/bash')
 
     def test_exact_server_descendants_and_pid_reuse(self):
         entry = self.allocation()

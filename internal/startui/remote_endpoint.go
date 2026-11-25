@@ -52,7 +52,7 @@ func (e remoteEndpoint) validate() error {
 
 func endpointPython(name string, payload any) string {
 	data, _ := json.Marshal(payload)
-	return "python3 -c " + remoteQuote(remoteAsset(name)) + " <<'VSCODE_ENDPOINT_PAYLOAD'\n" + string(data) + "\nVSCODE_ENDPOINT_PAYLOAD\n"
+	return "python3 -I -c " + remoteQuote(remoteAsset(name)) + " <<'VSCODE_ENDPOINT_PAYLOAD'\n" + string(data) + "\nVSCODE_ENDPOINT_PAYLOAD\n"
 }
 
 func (p *remoteController) configureEndpoint(ctx context.Context, alias string, e remoteEndpoint) error {

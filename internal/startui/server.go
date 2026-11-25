@@ -7,7 +7,6 @@ import (
 	"embed"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	licensing "github.com/mpg-age-bioinformatics/vscode-sandboxes"
 	"html"
@@ -15,7 +14,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -134,6 +132,7 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'")
 		if r.Host != ln.Addr().String() {
 			http.Error(w, "invalid host", 403)
@@ -410,16 +409,13 @@ func Run(config Config, execute func(Selection, io.Writer) error) error {
 	defer server.Close()
 	go server.Serve(ln)
 	url := "http://" + ln.Addr().String() + path
-	var window *exec.Cmd
-	if runtime.GOOS == "darwin" {
-		exe, _ := os.Executable()
-		window = exec.Command(filepath.Join(filepath.Dir(exe), "Sandbox Window"), url, config.Name)
-	} else if runtime.GOOS == "windows" {
-		window = exec.Command("powershell.exe", "-NoProfile", "-STA", "-Command", windowsWindow)
-		window.Env = append(os.Environ(), "SANDBOX_WINDOW_URL="+url, "SANDBOX_WINDOW_TITLE="+config.Name)
-		hideWindow(window)
-	} else {
-		return errors.New("the desktop window supports macOS and Windows")
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	window, err := startupWindowCommand(runtime.GOOS, filepath.Join(filepath.Dir(exe), "Sandbox Window"), url, config.Name)
+	if err != nil {
+		return err
 	}
 	if err := window.Start(); err != nil {
 		return fmt.Errorf("open startup window: %w", err)
@@ -484,14 +480,28 @@ func privateWrite(path string, data []byte) error {
 
 const windowsWindow = `
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
+$bootstrap = [Console]::In.ReadToEnd() | ConvertFrom-Json
+$uri = [Uri]$bootstrap.url
+if ($uri.Scheme -ne 'http' -or $uri.Host -ne '127.0.0.1') { exit 1 }
 $edge = @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe") | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if (!$edge) { [Windows.Forms.MessageBox]::Show('Microsoft Edge is required for the sandbox startup window.'); exit 1 }
-# A dedicated profile keeps the window independent of existing Edge sessions.
-$profile = Join-Path ([IO.Path]::GetTempPath()) ('sandbox-window-' + [Guid]::NewGuid().ToString())
-$p = Start-Process -FilePath $edge -ArgumentList @('--app=' + $env:SANDBOX_WINDOW_URL, '--user-data-dir="' + $profile + '"', '--no-first-run', '--no-default-browser-check') -PassThru
-$p.WaitForExit()
-Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue
+# Only this user can read the transient browser bootstrap and profile. Create
+# the directory with its final ACL, before writing any capability into it.
+$profile = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ('VS Code Sandboxes\window-' + [Guid]::NewGuid().ToString())
+$acl = New-Object Security.AccessControl.DirectorySecurity
+$acl.SetAccessRuleProtection($true, $false)
+$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+$rule = New-Object Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+$acl.AddAccessRule($rule)
+[IO.Directory]::CreateDirectory($profile, $acl) | Out-Null
+try {
+ $file = Join-Path $profile 'bootstrap.html'
+ $target = [System.Net.WebUtility]::HtmlEncode([string]$bootstrap.url)
+ [IO.File]::WriteAllText($file, '<!doctype html><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=' + $target + '">')
+ $fileURL = ([Uri]$file).AbsoluteUri
+ $p = Start-Process -FilePath $edge -ArgumentList @('--app="' + $fileURL + '"', '--user-data-dir="' + $profile + '"', '--no-first-run', '--no-default-browser-check', '--inprivate') -PassThru
+ $p.WaitForExit()
+} finally { Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue }
 `
 
 func startupPage() []byte {

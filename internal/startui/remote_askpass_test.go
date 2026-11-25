@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -52,7 +51,11 @@ func TestSSHAskpassSingleUseChallengesAndNoPersistence(t *testing.T) {
 	}
 	defer closeBridge()
 	var address string
+	var socketPath string
 	for _, entry := range cmd.Env {
+		if value, ok := strings.CutPrefix(entry, "VSCODE_SSH_ASKPASS_SOCKET="); ok {
+			socketPath = value
+		}
 		if strings.HasPrefix(entry, "VSCODE_SSH_ASKPASS_URL=") {
 			address = strings.TrimPrefix(entry, "VSCODE_SSH_ASKPASS_URL=")
 		}
@@ -61,6 +64,7 @@ func TestSSHAskpassSingleUseChallengesAndNoPersistence(t *testing.T) {
 		t.Fatal("no helper bridge")
 	}
 	t.Setenv("VSCODE_SSH_ASKPASS_URL", address)
+	t.Setenv("VSCODE_SSH_ASKPASS_SOCKET", socketPath)
 	for _, fixture := range []struct {
 		prompt, response string
 		cancel           bool
@@ -101,7 +105,12 @@ func TestSSHAskpassSingleUseChallengesAndNoPersistence(t *testing.T) {
 	if err != nil || len(files) != 0 {
 		t.Fatal("authentication persisted files", err)
 	}
-	response, err := http.Post(address+"wrong", "application/json", strings.NewReader(`{"prompt":"Password:"}`))
+	client, err := sshAskpassClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.CloseIdleConnections()
+	response, err := client.Post(address+"wrong", "application/json", strings.NewReader(`{"prompt":"Password:"}`))
 	if err != nil {
 		t.Fatal(err)
 	}

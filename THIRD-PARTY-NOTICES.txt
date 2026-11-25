@@ -6,12 +6,12 @@ Third-party components retain their own copyrights, licenses, and trademarks.
 
 macOS desktop helpers and Windows executables include Go runtime and standard-library code.
 The following notices accompany those executables, including the project runners they create.
-The Go toolchain used for the currently distributed Windows builds is Go 1.27.0.
+The Go toolchain used for the currently distributed Windows builds is Go 1.27.4.
 Review these notices when changing the toolchain or adding dependencies.
 
 Go runtime and standard library (BSD-3-Clause)
 https://go.dev/LICENSE
-https://github.com/golang/go/tree/go1.27.0
+https://github.com/golang/go/tree/go1.27.4
 
 Copyright 2009 The Go Authors.
 
@@ -42,7 +42,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Go runtime memory-copy implementation (MIT)
-https://github.com/golang/go/blob/go1.27.0/src/runtime/memmove_amd64.s
+https://github.com/golang/go/blob/go1.27.4/src/runtime/memmove_amd64.s
 
 Derived from Inferno's libkern/memmove-386.s (adapted for amd64)
 https://bitbucket.org/inferno-os/inferno-os/src/master/libkern/memmove-386.s
@@ -70,7 +70,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 Go math routines derived from Sun fdlibm (Sun permissive notices)
-https://github.com/golang/go/tree/go1.27.0/src/math
+https://github.com/golang/go/tree/go1.27.4/src/math
 
 Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
 
@@ -167,9 +167,12 @@ installed alongside it in generated projects' code directories.
 Continue IDE extension (runtime download)
 -----------------------------------------
 The sandbox setup downloads Continue 2.0.0 from its official VS Code Marketplace
-publication and retains its included LICENSE and notices. It modifies built-in
-tool approval defaults and the GUI fallback locally inside the sandbox to make
-enabled tools Automatic. No Continue extension binary is embedded in this launcher.
+publication and retains its included LICENSE and notices. It preserves the
+upstream tool approval defaults and GUI fallback, and marks the distribution
+pinned for reproducible setup. Distribution revision 3 adds a runtime guard to
+the shared hosted-search function: restricted/offline sandboxes cannot use the
+unfiltered hosted search service. Upstream tool-approval defaults stay intact.
+No Continue extension binary is embedded in this launcher.
 Source: https://github.com/continuedev/continue
 Marketplace: https://marketplace.visualstudio.com/items?itemName=Continue.continue
 

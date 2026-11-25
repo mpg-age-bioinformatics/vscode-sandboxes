@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -54,8 +56,33 @@ func configureSSHAskpass(cmd *exec.Cmd, host string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+
+	var listener net.Listener
+	socketDirectory, socketPath := "", ""
+	if runtime.GOOS != "windows" {
+		socketDirectory, err = os.MkdirTemp("", ".vscode-ssh-")
+		if err != nil {
+			return nil, err
+		}
+		socketPath = filepath.Join(socketDirectory, "askpass.sock")
+		if len(socketPath) > 100 {
+			os.RemoveAll(socketDirectory)
+			return nil, errors.New("Temporary path is too long for a private SSH authentication socket")
+		}
+		listener, err = net.Listen("unix", socketPath)
+		if err == nil {
+			err = os.Chmod(socketPath, 0600)
+		}
+	} else {
+		listener, err = net.Listen("tcp", "127.0.0.1:0")
+	}
 	if err != nil {
+		if listener != nil {
+			listener.Close()
+		}
+		if socketDirectory != "" {
+			os.RemoveAll(socketDirectory)
+		}
 		return nil, err
 	}
 
@@ -96,7 +123,7 @@ func configureSSHAskpass(cmd *exec.Cmd, host string) (func(), error) {
 	})}
 	// Only helper routing information enters the environment, never a response.
 	env := os.Environ()
-	for _, key := range []string{"SSH_ASKPASS", "SSH_ASKPASS_REQUIRE", "VSCODE_SSH_ASKPASS_URL"} {
+	for _, key := range []string{"SSH_ASKPASS", "SSH_ASKPASS_REQUIRE", "VSCODE_SSH_ASKPASS_URL", "VSCODE_SSH_ASKPASS_SOCKET"} {
 		clean := env[:0]
 		for _, entry := range env {
 			if !strings.HasPrefix(entry, key+"=") {
@@ -105,13 +132,23 @@ func configureSSHAskpass(cmd *exec.Cmd, host string) (func(), error) {
 		}
 		env = clean
 	}
-	cmd.Env = append(env, "SSH_ASKPASS="+executable, "SSH_ASKPASS_REQUIRE=force", "VSCODE_SSH_ASKPASS_URL=http://"+listener.Addr().String()+"/"+token)
+	address := listener.Addr().String()
+	if socketPath != "" {
+		address = "127.0.0.1:1"
+	}
+	cmd.Env = append(env, "SSH_ASKPASS="+executable, "SSH_ASKPASS_REQUIRE=force", "VSCODE_SSH_ASKPASS_URL=http://"+address+"/"+token, "VSCODE_SSH_ASKPASS_SOCKET="+socketPath)
 	// Older Unix OpenSSH versions also require DISPLAY to invoke askpass.
 	if os.Getenv("DISPLAY") == "" {
 		cmd.Env = append(cmd.Env, "DISPLAY=vscode-sandboxes:0")
 	}
 	go server.Serve(listener)
-	return func() { cancel(); _ = server.Close() }, nil
+	return func() {
+		cancel()
+		_ = server.Close()
+		if socketDirectory != "" {
+			_ = os.RemoveAll(socketDirectory)
+		}
+	}, nil
 }
 
 func removeSSHChallenge(id string) {
@@ -175,7 +212,10 @@ func runSSHAskpass(prompt string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	client := &http.Client{Timeout: 5 * time.Minute, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return errors.New("Redirect forbidden") }}
+	client, err := sshAskpassClient()
+	if err != nil {
+		return err
+	}
 	defer client.CloseIdleConnections()
 	response, err := client.Post(address, "application/json", bytes.NewReader(payload))
 	if err != nil {
@@ -187,4 +227,25 @@ func runSSHAskpass(prompt string, output io.Writer) error {
 	}
 	_, err = io.Copy(output, io.LimitReader(response.Body, 16384))
 	return err
+}
+
+// Unix filesystem permissions enforce the user's identity even if another local
+// account can inspect the helper's environment. Windows retains a random TCP
+// capability; process environments are not exposed across Windows accounts.
+func sshAskpassClient() (*http.Client, error) {
+	transport := &http.Transport{Proxy: nil}
+	if socket := os.Getenv("VSCODE_SSH_ASKPASS_SOCKET"); socket != "" {
+		info, err := os.Lstat(filepath.Dir(socket))
+		if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+			return nil, errors.New("Invalid private authentication socket directory")
+		}
+		target, err := os.Lstat(socket)
+		if err != nil || target.Mode()&os.ModeSocket == 0 || target.Mode().Perm()&0077 != 0 {
+			return nil, errors.New("Invalid private authentication socket")
+		}
+		transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+		}
+	}
+	return &http.Client{Timeout: 5 * time.Minute, Transport: transport, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return errors.New("Redirect forbidden") }}, nil
 }

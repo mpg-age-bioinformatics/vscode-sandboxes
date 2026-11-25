@@ -1,5 +1,27 @@
 #!/usr/bin/env bash
 # Run in the project directory. Preserve an incomplete, originless repository.
+# Shared workspaces may briefly report EEXIST before a just-created parent is
+# visible. Never replace an existing file; retry only that narrow error class.
+ensure_sandbox_directory() {
+  local directory attempt error_file status
+  for directory in "$@"; do
+    [[ ! -d "$directory" ]] || continue
+    if [[ -e "$directory" || -L "$directory" ]]; then
+      echo "Error: expected a directory, but another entry exists: $directory" >&2
+      return 1
+    fi
+    error_file="$(mktemp)" || return
+    for attempt in 1 2 3; do
+      if mkdir -p -- "$directory" 2>"$error_file"; then status=0;break;else status=$?;fi
+      if [[ -d "$directory" ]]; then status=0;break;fi
+      if [[ -e "$directory" || -L "$directory" ]] || ! LC_ALL=C grep -Eiq 'already exists|file exists|EEXIST' "$error_file" || [[ "$attempt" == 3 ]]; then break;fi
+      sleep 0.1
+    done
+    if [[ "$status" != 0 ]]; then cat "$error_file" >&2;rm -f -- "$error_file";return "$status";fi
+    rm -f -- "$error_file"
+  done
+}
+
 setup_sandbox_skills() (
   set -euo pipefail
   local repository="$1" existing_origin status staging='' backup

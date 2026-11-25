@@ -131,7 +131,8 @@ confirmation. A new Docker installation with no preset is initialized to the
 chosen mode. Existing organization policies can further restrict access.
 
 **Selected sites** starts with editable defaults for container registries and their
-layer-download hosts, npm/Node, GitHub, Linux packages, and VS Code installation.
+layer-download hosts, npm/Node, GitHub, Linux packages, VS Code installation,
+and exact Codex/ChatGPT authentication and backend hosts.
 Python adds PyPI and Conda hosts; R adds CRAN, Bioconductor, and R-universe hosts;
 General bioinformatics includes both sets. Each type retains its own edits.
 Use **Restore default sites** to reset that type's list. Only the displayed list
@@ -146,7 +147,9 @@ and [VS Code's network requirements](https://code.visualstudio.com/docs/setup/ne
 
 Each workspace starts behind a deny-all guard while connection settings and
 network rules are applied. Selected sites requires a deny-by-default preset;
-extra kit/global destinations are blocked for that workspace. If an existing
+the launcher recognizes Docker's implicit default deny through its read-only
+policy authorizer when no named default rule is listed.
+Extra kit/global destinations are blocked for that workspace. If an existing
 broad rule cannot be narrowed safely, startup stops with the guard in place.
 This uses Docker's hostname-based enforcement and inherits its documented
 [hostname blocking limitations](https://docs.docker.com/ai/governance/local/network-rules/).
@@ -178,23 +181,50 @@ configuration is backed up once and restored when switching back to Continue or
 clearing the private endpoint fields. Host Codex settings and authentication are
 not changed.
 
-The distributed launcher installs Continue **2.0.0** inside the Linux sandbox
-before VS Code opens, with enabled tools defaulting to **Automatic**, including
-file edits and terminal commands. Excluded tools remain excluded and Continue's
-runtime file/command checks remain in place. These are distribution defaults,
-not a copy of the launcher's author's IDE preferences; explicit user changes in
-Continue can still override them. This applies to fresh Python, R, and general
-bioinformatics sandboxes on macOS and Windows.
+Private endpoints must use HTTPS. HTTP is accepted only for `localhost` or a
+literal loopback IP. For Remote, loopback means the container's network namespace.
 
-Because this Continue version exposes IDE policies as user UI state rather than
-model-YAML settings, preparation adjusts the pinned extension's built-in defaults
-and GUI fallback inside the sandbox. The official Marketplace archive is verified
-against a platform-specific SHA-256 before extraction; the exact policy layout is
-checked before changing it. The extension is marked pinned, its license is retained,
-and prepared artifacts are cached for offline reuse. A version/checksum/layout
-mismatch stops startup; changing versions requires reviewing the defaults again.
-The launcher never changes the host's Continue extension or copies host tool-policy
-state. Initial setup requires the displayed VS Code Marketplace/CDN hosts.
+The distributed launcher installs Continue **2.0.0** inside the Linux sandbox
+before VS Code opens and preserves its upstream tool-approval prompts. File edits
+and terminal commands do not receive automatic permission from the launcher.
+Existing explicit user choices in Continue remain under the user's control.
+
+The official Marketplace archive is verified against a platform-specific SHA-256
+before extraction. Its expected policy layout is checked without changing the
+extension's executable tool-policy defaults. Prepared artifacts use revision 3;
+older launcher-patched automatic-default distributions are replaced on startup.
+Revision 3 adds a guard to Continue's shared hosted-search function: `search_web`
+and `@web` are blocked in Selected sites and No internet because the bundled
+search service has no verified domain-filter interface. Direct URL fetching
+still follows the sandbox's network policy. Missing/malformed policy files
+block hosted search as well; Open explicitly permits it.
+The extension is pinned, its license retained, and artifacts cached for offline
+reuse. The host Continue extension and host tool-policy state are not changed.
+Initial setup requires the displayed VS Code Marketplace/CDN hosts.
+
+Agent web-tool settings are applied inside both Local and Remote containers
+before VS Code opens, including on restart/reconnect after endpoint settings.
+Selected sites configures Codex's `tools.web_search.allowed_domains` and a Claude
+Code `PreToolUse` hook that constrains `WebSearch.allowed_domains` and checks
+`WebFetch` destinations. Existing search-off preferences and approval prompts
+remain in effect. No internet disables these hosted web tools. Switching to
+Open restores launcher-managed Codex/Chat settings and removes the Claude hook.
+Only sandbox home configuration is changed; host agent credentials are untouched.
+
+Hosted search uses domain-level filters, which include subdomains (and the base
+domain when translating a wildcard). They are **not an identical host/port
+firewall**. Port-specific/IP entries are omitted from hosted search; no supported
+domains, or more than 100 translated domains, disables hosted search. VS Code
+Chat’s Anthropic BYOK search receives `github.copilot.chat.anthropic.tools.websearch.allowedDomains` and is
+disabled when no supported domains remain; the launcher does not enable a tool
+the user left off. VS Code’s general fetch/browser filter is application-scoped
+and cannot be enforced per remote sandbox through its Machine settings; it needs
+a separate desktop-wide policy. Other Chat providers, MCP servers, plugins, remote browser
+services and provider-side tools require separate controls. These writable
+agent settings do not protect against deliberate changes by the sandbox user
+or an agent with the same file permissions. Docker/Apptainer transport controls
+remain the enforced boundary for direct sandbox traffic. Reload VS Code and
+start a new conversation after applying settings to an already open workspace.
 
 Before a private startup, the launcher sets `remote.extensionKind` for
 `Continue.continue` to `["workspace"]` in local VS Code user settings. VS Code
@@ -456,6 +486,11 @@ one is active. **Start another sandbox** leaves the current allocation running a
 another project. Unrelated Slurm jobs are excluded. Older jobs without launcher
 profile metadata cannot be attached through this inventory.
 
+For **Selected sites**, non-public destination IPs are blocked even if an allowed
+hostname resolves to them. Enable **Allow internal-network destinations in
+Selected sites** only when you intend to reach private cluster services. It
+applies when starting a new allocation and never removes the hostname allowlist.
+
 **Connect to running sandboxes:** enter your SSH login, list allocations, then
 attach to or stop the selected sandbox. The screenshot shows the initial view
 before a server is selected.
@@ -475,8 +510,9 @@ exchanges open consecutive prompts. Cancel or Escape stops that sign-in. You can
 also use **Test SSH connection…** before listing images. Background allocation
 checks stay noninteractive; use Reconnect if their login session has expired.
 
-Responses exist only transiently in memory and travel through a short-lived,
-capability-protected loopback bridge to OpenSSH's askpass helper. They are never
+Responses exist only transiently in memory. On macOS/Linux they travel through
+a short-lived Unix socket in a mode-0700 directory (socket mode 0600); Windows
+uses a capability-protected loopback bridge to OpenSSH's askpass helper. They are never
 written to application files, preferences, activity exports, process arguments or
 environment variables. The input clears immediately on submission, cancellation
 or expiry; autocomplete is disabled. No Terminal window or credential storage is

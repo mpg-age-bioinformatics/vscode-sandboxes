@@ -42,6 +42,7 @@ printf '%s' "$relay_script" | base64 -d > "$run/relay.sh"
 if [[ -n "$watchdog_script" ]]; then
  printf '%s' "$watchdog_script" | base64 -d > "$run/watchdog.py"
  chmod 600 "$run/watchdog.py"
+ printf '%s\n' host-anchored-v2 > "$run/watchdog-policy"
 fi
 printf '%s' "$profile_metadata" | base64 -d > "$run/profile.json"
 if [[ -n "$stage" ]]; then
@@ -67,7 +68,7 @@ printf '%s\n' "$job" > "$run/job-id"
 printf 'JOB=%s\n' "$job"
 # The singleton monitor lives on the login server, outside this SSH session.
 if [[ -n "$watchdog_script" ]]; then
- if ! python3 "$run/watchdog.py" register "$run" "$token" "$job"; then
+ if ! python3 -I "$run/watchdog.py" register "$run" "$token" "$job"; then
   current="$(squeue --noheader --jobs "$job" --format='%i|%k')"
   if [[ "$current" == "$job|vscode-sandboxes:$token" ]]; then scancel "$job"; fi
   echo 'Could not start the server-side idle watchdog; stopped the new allocation.' >&2

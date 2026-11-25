@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -18,6 +19,13 @@ func modelsEndpoint(base string) (*url.URL, error) {
 	endpoint, err := url.Parse(strings.TrimSpace(base))
 	if err != nil || endpoint.Hostname() == "" || (endpoint.Scheme != "https" && endpoint.Scheme != "http") || endpoint.User != nil || endpoint.Fragment != "" {
 		return nil, errors.New("Enter an HTTP(S) endpoint URL without embedded credentials or a fragment.")
+	}
+	if endpoint.Scheme == "http" {
+		host := strings.ToLower(endpoint.Hostname())
+		ip := net.ParseIP(host)
+		if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+			return nil, errors.New("Private endpoints require HTTPS. HTTP is permitted only for a local loopback endpoint or an SSH tunnel on localhost.")
+		}
 	}
 	escapedPath := strings.TrimRight(endpoint.EscapedPath(), "/")
 	if !strings.HasSuffix(escapedPath, "/models") {

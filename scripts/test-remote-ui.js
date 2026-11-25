@@ -10,7 +10,7 @@ function harness(vscode=true,docker=false){
  const elements=new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,{value:'',textContent:'',hidden:false,disabled:false,listeners:{},attrs:{},children:[],open:false,showModal(){this.open=true;},close(){this.open=false;},appendChild(child){this.children.push(child);},addEventListener(type,fn){this.listeners[type]=fn;},setAttribute(key,value){this.attrs[key]=value;},focus(){this.focused=true;}}]));
  const get=id=>elements.get(id),calls=[];
  get('remotePanel').hidden=true;
- let holdCatalog=false,pendingCatalog=null;
+ let holdCatalog=false,pendingCatalog=null,detachError='';
  let cache={bytes:1073741824,entries:2,files:8,measured:true,inUse:false},clearError='';
  let status={running:false,session:{},phase:''},prerequisites={ssh:true,vscode,docker,supported:true,installing:false};
  const profile={login:'hpc',image:'/images/workspace.sif',project:'~/sandboxes',folders:'',stateDir:'~/state',partition:'cluster',cpus:1,memory:'8G',time:'02:00:00',gpus:0,apptainer:'apptainer',moduleNames:'apptainer',modules:'',waitMinutes:30};
@@ -29,6 +29,7 @@ function harness(vscode=true,docker=false){
   if(route==='remote/sandboxes'&&holdCatalog)return new Promise(resolve=>{pendingCatalog=()=>resolve({ok:true,json:async()=>[]});});
   if(route==='remote/sandboxes')return {ok:true,json:async()=>[{token:'b'.repeat(32),jobID:'44',queueState:'RUNNING',profile}]};
   if(route==='remote/attach'){status={running:true,session:{active:true,jobID:'44',profile}};return {ok:true};}
+  if(route==='remote/detach'&&detachError)return {ok:false,text:async()=>detachError};
   if(route==='remote/stop-selected'||route==='remote/detach'){status={running:false,session:{active:false}};return {ok:true};}
   if(route==='remote/reconnect'||route==='remote/endpoint')return {ok:true};
   if(route==='install-prerequisites'){prerequisites={...prerequisites,installing:true};return {ok:true};}
@@ -36,7 +37,7 @@ function harness(vscode=true,docker=false){
   return {ok:true,json:async()=>({profile,status,prerequisites})};
  }});
  vm.runInContext(script,context);
- return {get,calls,window,setPrompt(value){authPrompt=value;},async pollAuth(){await timers.get('pollAuthentication')();},holdCatalog(){holdCatalog=true;},releaseCatalog(){pendingCatalog?.();},setCache(value){cache=value;},failClear(message){clearError=message;},setStatus(s){status=s;},async remote(){get('remoteTab').listeners.click();await tick();await tick();},async click(id){get(id).listeners.click();await tick();await tick();},async change(id){get(id).listeners.change();await tick();await tick();}};
+ return {get,calls,window,failDetach(message){detachError=message;},setPrompt(value){authPrompt=value;},async pollAuth(){await timers.get('pollAuthentication')();},holdCatalog(){holdCatalog=true;},releaseCatalog(){pendingCatalog?.();},setCache(value){cache=value;},failClear(message){clearError=message;},setStatus(s){status=s;},async remote(){get('remoteTab').listeners.click();await tick();await tick();},async click(id){get(id).listeners.click();await tick();await tick();},async change(id){get(id).listeners.change();await tick();await tick();}};
 }
 (async()=>{
  const h=harness();assert.equal(h.calls.length,0,'Local must remain default without querying HPC');
@@ -56,12 +57,14 @@ function harness(vscode=true,docker=false){
  h.setPrompt({id:'expiry',host:'raven.example.org',prompt:'Password:'});await h.pollAuth();h.get('remoteAuthResponse').value='discard-me';h.setPrompt(null);await h.pollAuth();assert.equal(h.get('remoteAuthResponse').value,'');assert.equal(h.get('remoteAuthDialog').open,false);
  assert.equal(h.get('remoteAuthenticate').disabled,false);
  assert(h.get('localPanel').hidden);assert.equal(h.get('remotePanel').hidden,false);assert.equal(h.get('remoteTab').attrs['aria-selected'],'true');
+ assert.equal(h.get('remoteAllowPrivateNetwork').checked,false,'Private destinations must be disabled by default');
+ h.get('remoteAllowPrivateNetwork').checked=true;
  assert.equal(h.get('remoteLogin').value,'hpc');assert.equal(h.get('remoteStart').disabled,false,'Remote requires no Docker');
  assert.equal(h.get('remoteInstallEditor').hidden,true);assert(h.get('remoteCurrentActions').hidden,'no allocation means no current-allocation actions');
  assert.equal(h.get('remoteProject').value,'~/sandboxes');assert.equal(h.get('remoteCPUs').value,1);assert.equal(h.get('remotePartition').value,'cluster');assert(!html.includes('id="remoteAccount"'));
  h.get('remoteFolders').value=' /shared/data , ~/references, ,/shared/data ';h.get('remoteModules').value=' apptainer , gcc/13 , , apptainer ';
  h.get('remoteCPUs').value='8';h.get('remoteForm').listeners.submit({preventDefault(){}});await tick();await tick();
- const submitted=h.calls.find(c=>c.route==='remote/start').body;assert.equal(submitted.cpus,8);assert.equal(submitted.moduleNames,'apptainer, gcc/13');assert.equal(submitted.folders,'/shared/data, ~/references');assert.equal(submitted.modules,'');assert(!('account' in submitted));assert(!('data' in submitted));assert.equal(submitted.login,'hpc');
+ const submitted=h.calls.find(c=>c.route==='remote/start').body;assert.equal(submitted.cpus,8);assert.equal(submitted.allowPrivateNetwork,true,'Only explicit opt-in allows private destinations');assert.equal(submitted.moduleNames,'apptainer, gcc/13');assert.equal(submitted.folders,'/shared/data, ~/references');assert.equal(submitted.modules,'');assert(!('account' in submitted));assert(!('data' in submitted));assert.equal(submitted.login,'hpc');
  assert(h.window.remoteBusy);assert.equal(h.get('remoteCurrentActions').hidden,false,'creation keeps cancellation available while queued');assert(h.get('remoteFields').disabled);assert.equal(h.get('remoteCancel').disabled,false,'Queued job must be cancellable');assert.match(h.get('remoteLog').textContent,/Queued/);
  await h.click('remoteCancel');assert.equal(h.window.remoteBusy,false);assert.equal(h.get('remoteStart').disabled,false);
  h.setStatus({running:false,session:{active:true,jobID:'42',profile:{}}});await h.remote();assert.equal(h.get('remoteReconnect').disabled,false);assert(h.get('remoteStart').disabled);
@@ -123,7 +126,20 @@ function harness(vscode=true,docker=false){
  assert.equal(modes.get('remoteNewPanel').hidden,false);assert(modes.get('remoteConnectPanel').hidden);assert(modes.get('remoteNewTab').focused);
  modes.setStatus({running:false,session:{active:true,jobID:'42',profile:{}}});await modes.remote();
  await modes.click('remoteConnectTab');assert(modes.get('remoteCurrentActions').hidden,'tracked job actions stay hidden in Connect');assert.equal(modes.get('remoteConnectionFields').disabled,false,'running allocation allows discovery on another server');
- await modes.click('remoteNewTab');assert.equal(modes.get('remoteCurrentActions').hidden,false);assert(modes.get('remoteConnectionFields').disabled,'tracked allocation keeps its creation settings locked');
+ await modes.click('remoteNewTab');assert(modes.get('remoteCurrentActions').hidden);assert.equal(modes.get('remoteConnectionFields').disabled,false,'New releases the saved selection and unlocks connection settings');
+ assert.equal(modes.get('remoteFields').disabled,false,'new allocation settings are editable');
+ assert.equal(modes.get('remoteStart').disabled,false,'new allocation can be submitted');
+ assert(modes.calls.some(c=>c.route==='remote/detach'),'New uses the leave-running operation');
+ assert(!modes.calls.some(c=>['remote/cancel','remote/stop-selected','remote/start'].includes(c.route)),'selecting New neither stops nor submits a job');
+ modes.get('remoteProject').value='~/sandboxes/another-project';await modes.remote();
+ assert.equal(modes.get('remoteProject').value,'~/sandboxes/another-project','polling preserves the new draft');
+ const starting=harness();starting.setStatus({running:true,session:{active:true,jobID:'42',profile:{login:'hpc'}}});await starting.remote();
+ await starting.click('remoteNewTab');assert(starting.get('remoteFields').disabled,'ongoing startup remains protected');
+ assert(!starting.calls.some(c=>c.route==='remote/detach'),'tab switching cannot detach an in-flight startup');
+ const detachFailure=harness();detachFailure.setStatus({running:false,session:{active:true,jobID:'42',profile:{login:'hpc'}}});await detachFailure.remote();
+ detachFailure.failDetach('Wait for startup to finish.');await detachFailure.click('remoteNewTab');
+ assert.equal(detachFailure.get('remoteConnectPanel').hidden,false,'failed detach preserves the selected Connect tab');
+ assert.match(detachFailure.get('remoteError').textContent,/Wait for startup/);
  await modes.click('remoteNew');assert.equal(modes.get('remoteNewPanel').hidden,false);assert.equal(modes.get('remoteConnectionFields').disabled,false);
  const returning=harness();returning.setStatus({running:false,session:{active:true,jobID:'42',profile:{login:'hpc'}}});await returning.remote();
  assert.equal(returning.get('remoteConnectPanel').hidden,false,'saved allocation opens Connect automatically');

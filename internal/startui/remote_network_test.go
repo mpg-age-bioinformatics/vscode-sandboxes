@@ -66,6 +66,7 @@ import json,os,pathlib,socket,sys,urllib.request,urllib.error
 mode=sys.argv[1]
 assert os.environ['VSCODE_SANDBOX_NETWORK']==mode
 assert {name for _,name in socket.if_nameindex()}=={'lo'}
+assert socket.gethostbyname('localhost')=='127.0.0.1'
 profile=json.loads(pathlib.Path('/run/vscode-launcher/profile.json').read_text())
 server=pathlib.Path.home()/'.vscode-server/bin'/profile['editorCommit']
 assert (server/'bin/code-server').is_file()
@@ -93,6 +94,7 @@ else:
  else:raise AssertionError('Offline internet worked')
 print('NETWORK_POLICY_VERIFIED',mode)
 PY
+node -e 'require("node:dns").lookup("localhost",(error,address)=>{if(error||address!=="127.0.0.1")process.exit(1);console.log("NODE_LOCALHOST_VERIFIED")})'
 if [ "$1" = restricted ]; then
  node -e 'fetch("https://pypi.org/simple/pip/").then(r=>{if(r.status!==200)process.exit(1);console.log("NODE_PROXY_VERIFIED")}).catch(e=>{console.error(e);process.exit(1)})'
 fi

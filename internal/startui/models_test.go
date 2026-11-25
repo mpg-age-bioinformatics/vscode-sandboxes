@@ -30,6 +30,19 @@ func TestModelsEndpointPaths(t *testing.T) {
 	}
 }
 
+func TestPrivateEndpointRequiresEncryptedTransport(t *testing.T) {
+	for _, address := range []string{"http://models.example.org/v1", "http://10.0.0.1/v1", "http://127.0.0.1.example.org/v1", "http://[::ffff:10.0.0.1]/v1"} {
+		if _, err := modelsEndpoint(address); err == nil {
+			t.Fatal("accepted unencrypted non-loopback endpoint", address)
+		}
+	}
+	for _, address := range []string{"http://localhost:8080/v1", "http://127.0.0.1:8080/v1", "http://[::1]:8080/v1", "https://models.internal/v1"} {
+		if _, err := modelsEndpoint(address); err != nil {
+			t.Fatal(address, err)
+		}
+	}
+}
+
 func TestModelListingUsesBearerKeyAndReturnsAliases(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" || r.URL.Path != "/v1/models" || r.Header.Get("Authorization") != "Bearer fake-model-key" {

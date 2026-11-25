@@ -4,7 +4,19 @@ import WebKit
 final class WindowDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandlerWithReply {
     var window: NSWindow!
     var web: WKWebView!
+    var startupURL: URL!
+    var startupTitle = "VS Code - Sandboxes"
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The capability is delivered through a private inherited pipe.
+        let data = FileHandle.standardInput.readDataToEndOfFile()
+        guard data.count <= 65536,
+              let values = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+              let address = values["url"], let url = URL(string: address),
+              url.scheme == "http", url.host == "127.0.0.1", url.port != nil else {
+            NSApp.terminate(nil); return
+        }
+        startupURL = url
+        startupTitle = values["title"] ?? startupTitle
         // This helper runs from Contents/Resources rather than Contents/MacOS.
         // Use the enclosing app's icon for its Dock presence as well.
         let executable = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
@@ -17,11 +29,12 @@ final class WindowDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, W
         }
         installMenus()
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 820), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = CommandLine.arguments[2]
+        window.title = startupTitle
         window.minSize = NSSize(width: 760, height: 620)
         window.center()
         window.delegate = self
         let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
         configuration.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "chooseFolder")
         configuration.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "exportActivity")
         web = WKWebView(frame: window.contentView!.bounds, configuration: configuration)
@@ -29,7 +42,7 @@ final class WindowDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, W
         web.navigationDelegate = self
         web.uiDelegate = self
         window.contentView!.addSubview(web)
-        web.load(URLRequest(url: URL(string: CommandLine.arguments[1])!))
+        web.load(URLRequest(url: startupURL))
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -39,7 +52,7 @@ final class WindowDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, W
         let main = NSMenu()
         let applicationItem = NSMenuItem()
         let application = NSMenu()
-        let quit = NSMenuItem(title: "Quit \(CommandLine.arguments[2])", action: #selector(closeApplication(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit \(startupTitle)", action: #selector(closeApplication(_:)), keyEquivalent: "q")
         quit.target = self
         application.addItem(quit)
         applicationItem.submenu = application
@@ -64,10 +77,13 @@ final class WindowDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, W
         window.performClose(sender)
     }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        if let url = navigationAction.request.url, url.host != "127.0.0.1" {
+        guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
+        if url.scheme == startupURL.scheme && url.host == startupURL.host && url.port == startupURL.port && url.path.hasPrefix(startupURL.path) {
+            decisionHandler(.allow)
+        } else {
             if ["http", "https"].contains(url.scheme ?? "") { NSWorkspace.shared.open(url) }
             decisionHandler(.cancel)
-        } else { decisionHandler(.allow) }
+        }
     }
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if let url = navigationAction.request.url, ["http", "https"].contains(url.scheme ?? ""), url.host != "127.0.0.1" {
@@ -78,7 +94,7 @@ final class WindowDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, W
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping (Any?, String?) -> Void) {
         guard ["chooseFolder", "exportActivity"].contains(message.name), message.frameInfo.isMainFrame,
               message.frameInfo.securityOrigin.host == "127.0.0.1",
-              message.frameInfo.request.url?.absoluteString == CommandLine.arguments[1] else {
+              message.frameInfo.request.url == startupURL else {
             replyHandler(nil, "Folder selection is only available in the startup window.")
             return
         }

@@ -25,6 +25,95 @@ shared host kernel, not a VM boundary, an MPCDF certification, or a guarantee of
 equal security on every cluster. The actual runtime/kernel/site configuration
 matters. Trusted images and a maintained host remain necessary.
 
+## Host control code and local authentication hardening
+
+Trusted launcher Python runs with `python3 -I` (including scripts supplied over
+stdin, inline commands, catalogs, endpoint setup and the host watchdog). Isolated
+mode excludes the working directory and user site-packages and ignores Python
+import-path environment overrides. This prevents an agent-writable project file
+such as `pathlib.py` or `json.py` from executing as a host-side standard-library
+import. Cluster module initialization and executable PATH remain explicitly
+trusted administrator/user inputs; do not resolve executables from project paths.
+
+The desktop API capability is delivered to the native window as JSON over an
+inherited stdin pipe, never argv or environment variables. macOS uses a
+nonpersistent WKWebView store and restricts navigation to the exact launcher
+origin and capability path. Windows receives the same pipe bootstrap, creates a
+user-only ACL directory before writing a temporary bootstrap HTML file, and opens
+Edge InPrivate using only that file path in argv. Its private profile/bootstrap
+are removed when the window closes (an abrupt OS/process termination can leave
+the ACL-protected directory behind). These are session capabilities, not saved
+SSH passwords. Same-user malware and privileged OS inspection remain outside
+this boundary.
+
+SSH passwords, key passphrases and 2FA responses are single-use in-memory
+responses. On Unix the askpass HTTP protocol is carried over a filesystem Unix
+socket in a mode-0700 temporary directory, with socket mode 0600 and an additional
+random request capability. Other Unix accounts cannot connect merely by reading
+a process environment. Windows uses its existing random-capability loopback
+bridge. These measures do not promise exclusion from OS swap or crash dumps.
+
+Private model endpoints require HTTPS; HTTP is accepted only for literal
+loopback IPs or `localhost`. A Remote loopback endpoint is inside the container,
+not the laptop. Redirects remain restricted to the original scheme and origin.
+
+Continue remains pinned and checksum-verified. Distribution revision 3 preserves
+upstream `allowedWithPermission` policies, replacing older revision-1 packages
+that patched automatic approval. Explicit Continue user choices are not reset.
+Revision 3 gates the shared hosted-search function, as detailed below.
+
+### Agent web tools
+
+Transport isolation cannot filter requests made by a model provider's hosted
+tools. The shared `common/assets/agent-network.py` therefore applies a second,
+application-level policy in the allocation-local home. It runs before the
+remote SSH service and again after private-endpoint configuration on attach or
+reconnect, before opening VS Code. Local uses the same helper in the shell
+sandbox and the exact nested development container selected by workspace label.
+Existing Local projects receive the current helper without regenerating files.
+Configuration uses the image's system `/usr/bin/python3` (Python 3.11+ with
+`tomllib`), independently of a project's selected Python runtime. Custom/older
+images need that interpreter; unsupported or malformed configuration stops
+startup rather than silently omitting web-tool settings.
+
+| Agent | Selected sites | No internet |
+| --- | --- | --- |
+| Codex | `tools.web_search.allowed_domains`, preserving the original search mode (including disabled) | `web_search="disabled"` |
+| Claude Code | A `PreToolUse` command hook rewrites/intersects `WebSearch.allowed_domains`; `WebFetch` checks the requested URL against exact/wildcard hosts and ports | Hook exits 2 for both web tools |
+| Continue 2.0.0 | Revision-3 guard disables the shared hosted-search function used by `search_web` and `@web`; direct fetch remains transport-controlled | Same guard denies hosted search |
+| VS Code Chat | Remote Machine settings supply `github.copilot.chat.anthropic.tools.websearch.allowedDomains` for Anthropic BYOK search | Anthropic BYOK search disabled |
+
+The Claude hook deliberately supplies no `permissionDecision="allow"`, so
+normal permissions still apply. Existing unrelated hooks and permissions are
+preserved. Explicitly disabled Claude hooks cause restricted startup to fail.
+Codex configuration is parsed as TOML before updates; original comments are
+kept in an owner-only backup. Managed key snapshots support Open-mode restore
+without replacing endpoint/model settings. Continue's original Marketplace
+archive digests are unchanged; the single expected shared-search implementation
+is patched before installation and its installed-file hashes recorded. Layout
+drift, a missing/malformed Continue policy file or an unknown policy mode denies
+hosted search before a provider request. Continue's other tool approvals are not
+modified. Old revision-2 packages are upgraded on startup/reconnect.
+
+Search-domain filters include subdomains, and wildcard translation also includes
+the base domain. They cannot represent exact network-policy semantics. Explicit
+port and IP rules are omitted; an empty translated set or more than 100 domains
+disables Codex/Claude hosted search. Claude's initial WebFetch URL check does not
+claim to control provider-side redirects. Chat provider tools other than the
+configured Anthropic search, MCP/plugins, provider-managed remote tools and
+browser services are not covered by these search filters. The general VS Code fetch/browser filter is APPLICATION-scoped in the tested
+1.147 build; writing it in remote Machine settings would be ignored. Enforcing
+that filter needs a desktop-wide policy and is not claimed here. User/project
+settings and tool runtime versions can affect editor-side behavior. All of these files
+are writable by the sandbox user: this is application configuration, not a
+tamper-resistant service boundary. Direct sandbox egress remains independently
+enforced by Docker or the Apptainer network namespace/gateway.
+
+References: [Codex configuration](https://learn.chatgpt.com/docs/config-file/config-reference),
+[search domain semantics](https://developers.openai.com/api/docs/guides/tools-web-search#domain-filtering),
+[Claude hooks](https://code.claude.com/docs/en/hooks), and
+[VS Code agent settings](https://code.visualstudio.com/docs/agents/reference/ai-settings).
+
 ## Runtime command and enforcement
 
 `remoteAsset` embeds the common `remote_assets/security.sh` helpers in the
@@ -188,17 +277,35 @@ SSH, `nsenter`, host TCP listener, root privilege or general host command
 execution is exposed to the workspace. The relay applies raw PTY mode for older
 Slurm versions, preserving SSH binary traffic and half-close behavior.
 
-The singleton watchdog must inspect the correct service across PID namespaces.
-The container records its SSH PID, start tick, PID-namespace identifier, job and
-allocation token. For new isolated workspaces the watchdog runs a short trusted
-Python probe through `srun` **on the host**, not in another isolated container.
-It resolves the host PID by matching namespace identifier, innermost `NSpid`
-and process start tick, checks UID and allocation identity, then counts only
-authenticated SSH descendants of that exact server. No `nsenter` or compute-node
-SSH is used. This probe executes the read-only launcher watchdog script, not
-project code. An unverifiable process/namespace retains the allocation and
-retries, rather than cancelling on uncertain liveness. The existing 24-hour
-per-sandbox timeout and singleton lifecycle remain in effect.
+The singleton watchdog inspects the correct service across PID namespaces.
+For new allocations, the container's initial PID/start/namespace record is only
+an untrusted discovery hint. Before normal waiting, the host batch process runs
+`watchdog.py anchor` to verify the server's UID, executable, start tick, namespace
+and ancestry under that exact Apptainer launcher. It writes `server-identity.json`
+in the control directory outside the writable runtime bind. `watchdog-policy`
+requires that anchor before subsequent host probes accept liveness.
+
+Probes use this host-written identity rather than the container's mutable
+`ssh-server.json`; authenticated process titles also require real sshd/session
+executables and an ancestry chain containing only those executables back to the
+anchored server. Shells with forged process titles are not connections. Ready
+clock values come from the host anchor; future/non-finite timestamps cannot
+extend idle time. For anchored allocations, writable SSH activity files are
+ignored. Generated SSH config uses `PermitLocalCommand yes` and a client-side
+`LocalCommand` that runs only after successful container authentication. It
+reuses the laptop's outer login to write `host-activity.json` in the read-only
+control directory. That callback uses `ssh -n` and redirects its stdout to stderr:
+it must never consume a workspace script/credential payload from the parent's
+stdin or contaminate the container proof/model JSON output. This preserves short sessions between one-minute polls
+without granting the agent permission to forge its own host heartbeat. The host
+command requires the allocation identity and an authenticated host SSH session. A probe that cannot establish process identity retains the allocation
+and retries, rather than cancelling a potentially active editor.
+
+Legacy allocations have no host anchor and retain compatibility observation;
+stop and recreate them to obtain the new boundary. No second watchdog daemon,
+`nsenter` or direct compute SSH is introduced. Host-account compromise and
+cooperating processes elsewhere in the same HPC account remain outside the
+container threat model.
 
 New generated images place explanation stubs for Slurm commands before normal
 system commands in `PATH`, following MPCDF's workflow: write job scripts in the
@@ -231,6 +338,15 @@ host, only `lo` exists, and direct IPv4/IPv6 connection attempts fail. The exist
 capability, seccomp and NoNewPrivs verification also runs before project setup.
 The process cannot regain the host network via namespace changes under the
 strict seccomp policy. No direct external DNS, TCP or UDP route is provided.
+
+For both isolated modes, the batch script creates an allocation-local hosts
+file and explicitly binds it read-only at `/etc/hosts`. It contains only
+`127.0.0.1 localhost` and `::1 ip6-localhost ip6-loopback`; host/cluster DNS
+mappings are not imported. `localhost` deliberately resolves to IPv4 loopback,
+matching the Codex OAuth listener. This avoids Apptainer's empty generated hosts
+file with `--network none`, which made VS Code's remote callback tunnel fail
+with `getaddrinfo EAI_AGAIN localhost` despite working numeric loopback sockets.
+External DNS and routing remain blocked; this adds no gateway exception.
 
 **No internet** creates no egress gateway. Local loopback services (SSH,
 notebooks and debugger listeners) still work. The VS Code connection transports
@@ -269,6 +385,13 @@ supported; `**.example.org` also matches the base domain. A rule without a port
 allows 80/443; an explicit `:port` permits that port only. Wildcards match at
 dot boundaries. Matching uses lowercase names with a trailing dot removed.
 DNS resolution happens outside the workspace only after the authority matches.
+Every resolved address must be globally routable and non-multicast by default;
+private, loopback, link-local and other non-public addresses are rejected. The
+connection uses the already-validated numeric address without a second DNS lookup.
+The Remote checkbox **Allow internal-network destinations in Selected sites**
+persists `allowPrivateNetwork: true` for a new allocation and explicitly permits
+non-public addresses; the hostname/port allowlist still applies. Enable it only
+for intended internal services. Existing gateways keep their recorded policy.
 The gateway supports HTTP absolute-form requests and CONNECT tunnels for HTTPS.
 It rejects ambiguous authorities, duplicate/invalid headers, mismatched Host,
 transfer-encoding, upgrades, invalid/oversized body lengths and unsafe framing.

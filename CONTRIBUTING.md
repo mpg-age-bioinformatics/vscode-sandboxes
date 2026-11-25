@@ -235,6 +235,16 @@ existing tags that predate `CHANGES.md`, link to the documentation commit contai
 that entry; never move a published tag to add the file. Verify that uploaded
 downloads match local artifacts and mark the release as the latest stable release.
 
+## Security regression checks
+
+Use the patched Go version required by `go.mod`. Before release, run
+`go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...` along with the Go suite,
+vet and the Remote watchdog/network/Continue regressions. The Security checks
+workflow runs these gates on pushes and pull requests, uses read-only repository
+permissions, and pins actions to reviewed commit SHAs. It does not authenticate
+to any real HPC or run opted-in live tests. Maintain the toolchain and scanner
+version as security updates are released.
+
 ## License and dependency notices
 
 Keep `LICENSE`, `THIRD-PARTY-NOTICES.txt` and `DISCLAIMER.txt` with every release, including releases

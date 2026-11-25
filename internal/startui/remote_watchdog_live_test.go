@@ -164,6 +164,26 @@ export SINGULARITY_BINDPATH="$APPTAINER_BINDPATH"`
 			case <-time.After(3 * time.Second):
 			}
 		}
+		anchored, anchorErr := loginSSH(ctx, host, `python3 -I - "$1" "$2" "$3" <<'PYANCHOR'
+import json,pathlib,subprocess,sys,time
+run=pathlib.Path(sys.argv[1])
+for attempt in range(100):
+ if (run/'server-identity.json').exists():break
+ time.sleep(.1)
+identity=json.loads((run/'server-identity.json').read_text())
+assert identity['token']==sys.argv[2] and identity['jobID']==sys.argv[3]
+assert identity['readyAt']<=time.time()
+# The actual host probe must accept the anchored PID/namespace/executable.
+help_text=subprocess.check_output(['srun','--help'],text=True)
+options=[flag for flag in ('--overlap','--exact') if flag in help_text]
+observation=json.loads(subprocess.check_output(['srun','--jobid='+sys.argv[3],'--nodes=1','--ntasks=1','--cpus-per-task=1','--mpi=none']+options+['python3','-I',str(run/'watchdog.py'),'probe',str(run),sys.argv[2],sys.argv[3]],text=True))
+assert observation['hostAnchored'] is True
+print('HOST_ANCHORED_SSH_IDENTITY_VERIFIED')
+PYANCHOR`, s.RunDir, token, s.JobID)
+		if anchorErr != nil {
+			t.Fatal("host anchor", anchored, anchorErr)
+		}
+		t.Log(anchored)
 		s.User = v["USER"]
 		s.Node = v["HOST"]
 		s.ProjectPath = v["PROJECT"]
@@ -177,6 +197,20 @@ export SINGULARITY_BINDPATH="$APPTAINER_BINDPATH"`
 			}
 		}
 		sessions[n] = s
+		if _, err := loginSSH(ctx, "vscode-sandboxes-"+s.Token, "true"); err != nil {
+			t.Fatal("authenticated connection", err)
+		}
+		event, err := loginSSH(ctx, host, `python3 -I - "$1" "$2" "$3" <<'PYCLIENT'
+import json,pathlib,sys,time
+record=json.loads((pathlib.Path(sys.argv[1])/'host-activity.json').read_text())
+assert record['token']==sys.argv[2] and record['jobID']==sys.argv[3]
+assert 0<=time.time()-record['lastAuthenticatedAt']<60
+print('HOST_AUTHENTICATION_EVENT_VERIFIED')
+PYCLIENT`, s.RunDir, s.Token, s.JobID)
+		if err != nil {
+			t.Fatal("host authentication event", event, err)
+		}
+		t.Log(event)
 		if bootstrapOnly && os.Getenv("VSCODE_REMOTE_NETWORK_TEST") != "1" {
 			out, err := loginSSH(ctx, "vscode-sandboxes-"+s.Token, `set -eu
 node /run/vscode-launcher/install-continue.js check

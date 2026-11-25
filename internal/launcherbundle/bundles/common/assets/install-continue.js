@@ -13,7 +13,7 @@ const markerName = '.sandbox-continue-policy.json';
 function valid(root) {
   try {
     const marker = JSON.parse(fs.readFileSync(path.join(root, markerName), 'utf8'));
-    if (marker.revision !== 1 || marker.version !== version || marker.platform !== target) return false;
+    if (marker.revision !== 3 || marker.version !== version || marker.platform !== target) return false;
     const files = Object.keys(marker.files).sort();
     if (files.join(',') !== ['gui/assets/index.js','out/extension.js','package.json'].join(',')) return false;
     return files.every(file => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex') === marker.files[file]);
@@ -31,11 +31,11 @@ try {
     const unpack = spawnSync('tar', ['-xf','-','-C',staging], {stdio:'inherit'});
     if (unpack.error || unpack.status !== 0) throw Error('Could not receive Continue package.');
     const prepared = path.join(staging, name);
-    if (!valid(prepared)) throw Error('Continue package does not contain verified automatic defaults.');
+    if (!valid(prepared)) throw Error('Continue package does not contain verified approval defaults.');
     const previous = path.join(staging, 'previous');
     if (fs.existsSync(destination)) fs.renameSync(destination, previous);
     try { fs.renameSync(prepared, destination); }
     catch (error) { if (fs.existsSync(previous)) fs.renameSync(previous, destination); throw error; }
-    console.log(`Continue ${version}: enabled tools default to Automatic, including terminal commands.`);
+    console.log(`Continue ${version}: upstream tool approval prompts are preserved.`);
   } finally { fs.rmSync(staging, {recursive:true, force:true}); }
 } catch (error) { console.error(error.message); process.exit(1); }

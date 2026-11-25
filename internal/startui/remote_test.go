@@ -86,10 +86,20 @@ func TestRemoteLaunchAndReconnectThroughVerifiedContainer(t *testing.T) {
 	os.WriteFile(filepath.Join(home, ".ssh", "config"), []byte(original), 0600)
 	s := RemoteSession{Profile: remoteTestProfile(), Token: strings.Repeat("a", 32), Active: true}
 	hostKey := base64.StdEncoding.EncodeToString(append([]byte{0, 0, 0, 11}, append([]byte("ssh-ed25519"), append([]byte{0, 0, 0, 32}, bytes.Repeat([]byte{1}, 32)...)...)...))
-	submissions, probes, proofs, endpointConfigurations := 0, 0, 0, 0
+	submissions, probes, proofs, endpointConfigurations, webConfigurations := 0, 0, 0, 0, 0
 	p := &remoteController{state: RemoteStatus{Session: s}, pollInterval: time.Millisecond}
 	p.ssh = func(ctx context.Context, host, script string, args ...string) (string, error) {
-		if strings.HasPrefix(script, "python3 -c ") {
+		if strings.Contains(script, "VSCODE_AGENT_NETWORK") {
+			if host != "vscode-sandboxes-"+s.Token || proofs != webConfigurations+1 {
+				t.Fatal("web configuration did not follow proof of the exact container")
+			}
+			if _, err := os.Stat(log); err == nil {
+				t.Fatal("editor opened before web policy")
+			}
+			webConfigurations++
+			return "AGENT_WEB_POLICY_CONFIGURED\n", nil
+		}
+		if strings.HasPrefix(script, "python3 -I -c ") {
 			if host != "vscode-sandboxes-"+s.Token || len(args) != 0 || proofs != 1 {
 				t.Fatal("endpoint configuration did not target the verified container")
 			}
@@ -144,7 +154,7 @@ func TestRemoteLaunchAndReconnectThroughVerifiedContainer(t *testing.T) {
 		t.Fatal("lost SSH settings", string(config))
 	}
 	managed, _ := os.ReadFile(filepath.Join(settingsDir(), "remote-ssh", s.Token+".conf"))
-	for _, part := range []string{"ProxyCommand", "researcher@hpc-login", "/relay.sh", "HostName 127.0.0.1", "StrictHostKeyChecking yes", "IdentityAgent none", "ForwardAgent no"} {
+	for _, part := range []string{"ProxyCommand", "PermitLocalCommand yes", "connected-host", "researcher@hpc-login", "/relay.sh", "HostName 127.0.0.1", "StrictHostKeyChecking yes", "IdentityAgent none", "ForwardAgent no"} {
 		if !bytes.Contains(managed, []byte(part)) {
 			t.Fatal("missing SSH protection", part)
 		}
@@ -165,7 +175,7 @@ func TestRemoteLaunchAndReconnectThroughVerifiedContainer(t *testing.T) {
 	if err := p.launch(context.Background(), p.snapshot().Session, true); err != nil {
 		t.Fatal(err)
 	}
-	if submissions != 1 || proofs != 2 || endpointConfigurations != 1 {
+	if submissions != 1 || proofs != 2 || endpointConfigurations != 1 || webConfigurations != 2 {
 		t.Fatal("reconnect submitted another job")
 	}
 	p.ssh = func(_ context.Context, host, script string, args ...string) (string, error) {
@@ -405,5 +415,78 @@ done`,
 	folders, err = os.ReadFile(filepath.Join(parseRemoteValues(out)["RUN"], "additional-folders"))
 	if err != nil || len(folders) != 0 {
 		t.Fatal("expected no additional mounts", string(folders), err)
+	}
+}
+
+func TestRemoteAuthenticationHookPreservesInputAndProtocolOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX SSH hook shell fixture")
+	}
+	home := remoteTestHome(t)
+	bin := filepath.Join(home, "bin")
+	os.MkdirAll(bin, 0700)
+	fake := `#!/bin/sh
+null_input=false
+for argument in "$@";do [ "$argument" != -n ] || null_input=true;done
+if [ "$null_input" = false ];then cat >/dev/null;fi
+printf 'authentication-hook banner\n'
+`
+	if err := os.WriteFile(filepath.Join(bin, "ssh"), []byte(fake), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	s := RemoteSession{Profile: remoteTestProfile(), Token: strings.Repeat("c", 32), JobID: "42", RunDir: "/shared/run with spaces", Port: 2222, User: "researcher"}
+	key := base64.StdEncoding.EncodeToString(append([]byte{0, 0, 0, 11}, append([]byte("ssh-ed25519"), append([]byte{0, 0, 0, 32}, bytes.Repeat([]byte{1}, 32)...)...)...))
+	if err := prepareRemoteSSH(s, "ssh-ed25519 "+key); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(settingsDir(), "remote-ssh", s.Token+".conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "  LocalCommand ") {
+			hook = strings.TrimPrefix(line, "  LocalCommand ")
+		}
+	}
+	if hook == "" {
+		t.Fatal("missing authentication hook")
+	}
+	// The command after the hook represents the container shell receiving its
+	// script; the fake SSH faithfully consumes stdin unless -n is present.
+	script := "set -- '42'\nprintf 'CONTAINER_OK\\n'\n"
+	command := exec.Command("sh", "-c", hook+"\ncat")
+	command.Stdin = strings.NewReader(script)
+	var output, diagnostics bytes.Buffer
+	command.Stdout = &output
+	command.Stderr = &diagnostics
+	if err := command.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if output.String() != script {
+		t.Fatal("authentication hook consumed input or polluted protocol output")
+	}
+	if !strings.Contains(diagnostics.String(), "authentication-hook banner") {
+		t.Fatal("hook diagnostics were lost")
+	}
+}
+
+func TestRemoteContainerProofFailureDiagnostics(t *testing.T) {
+	failure := errors.New("transport failed")
+	if err := verifyRemoteContainerProof("", failure); !errors.Is(err, failure) {
+		t.Fatal("lost SSH error", err)
+	}
+	for _, proof := range []string{"", " \n", "login banner\nCONTAINER_OK\n", "unexpected-secret-value"} {
+		err := verifyRemoteContainerProof(proof, nil)
+		if err == nil || strings.Contains(err.Error(), "<nil>") {
+			t.Fatal("misleading or missing error", err)
+		}
+		if strings.Contains(err.Error(), "unexpected-secret-value") {
+			t.Fatal("unexpected response leaked into error")
+		}
+	}
+	if err := verifyRemoteContainerProof("CONTAINER_OK\n", nil); err != nil {
+		t.Fatal(err)
 	}
 }

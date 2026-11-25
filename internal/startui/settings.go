@@ -82,9 +82,8 @@ func validateSettings(s Selection) error {
 				return errors.New("Use an absolute TOML file path.")
 			}
 		} else {
-			u, err := url.Parse(s.BaseURL)
-			if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
-				return errors.New("Enter an HTTP or HTTPS endpoint URL without embedded credentials.")
+			if _, err := modelsEndpoint(s.BaseURL); err != nil {
+				return err
 			}
 		}
 	}
@@ -223,6 +222,9 @@ func endpointConfig(s Selection) ([]byte, error) {
 		return nil, errors.New("The selected provider is missing from model_providers.")
 	}
 	base, _ := p["base_url"].(string)
+	if _, err := modelsEndpoint(base); err != nil {
+		return nil, err
+	}
 	u, err := url.Parse(base)
 	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
 		return nil, errors.New("The selected provider needs an HTTP(S) base_url without embedded credentials.")

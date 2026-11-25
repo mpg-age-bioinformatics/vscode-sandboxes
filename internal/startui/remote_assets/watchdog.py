@@ -1,5 +1,5 @@
 """One detached login-node watchdog per HPC user; no per-allocation watchdogs."""
-import contextlib, fcntl, json, os, pathlib, pwd, re, subprocess, sys, tempfile, time
+import contextlib, fcntl, json, math, os, pathlib, pwd, re, subprocess, sys, tempfile, time
 
 IDLE_SECONDS = 24 * 60 * 60
 POLL_SECONDS = 60
@@ -31,9 +31,9 @@ def identity(run, token, job):
         if not owned(target) or target.read_text().strip() != expected:
             raise ValueError('Allocation identity changed')
 
-def proc_info(pid, proc=pathlib.Path('/proc')):
+def proc_info(pid, proc=pathlib.Path('/proc'), require_owner=True):
     directory = proc / str(pid)
-    if directory.stat().st_uid != os.getuid(): raise ValueError('Wrong process owner')
+    if require_owner and directory.stat().st_uid != os.getuid(): raise ValueError('Wrong process owner')
     raw = (directory / 'stat').read_text()
     fields = raw[raw.rfind(')') + 2:].split()
     return {'ppid': int(fields[1]), 'start': fields[19], 'state': fields[0]}
@@ -66,10 +66,31 @@ def connected(run):
         atomic(run / 'ssh-activity.json', {'token': token, 'jobID': job,
                'lastAuthenticatedAt': max(time.time(), old.get('lastAuthenticatedAt', 0))})
 
-def probe(run, token, job, proc=pathlib.Path('/proc')):
+def connected_host(run, token, job):
+    # Invoked on the login host by the SSH client's LocalCommand only after
+    # successful container authentication, using the laptop's outer SSH login.
     identity(run, token, job)
+    if not os.environ.get('SSH_CONNECTION') or not (run / 'watchdog-policy').is_file():
+        raise ValueError('An authenticated host SSH connection is required')
+    event = run / 'host-activity.json'
+    descriptor = os.open(run / 'host-activity.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor,'w') as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        previous = read_json(event) if event.exists() else {}
+        now = time.time()
+        old = float(previous.get('lastAuthenticatedAt',0))
+        if not math.isfinite(old) or old > now: old = 0
+        atomic(event, {'token':token,'jobID':job,'lastAuthenticatedAt':max(now,old)})
+
+def probe(run, token, job, proc=pathlib.Path('/proc'), anchoring=False):
+    identity(run, token, job)
+    anchor = run / 'server-identity.json'
+    trusted = anchor.exists() and not anchoring
+    if (run / 'watchdog-policy').exists() and not trusted and not anchoring:
+        raise ValueError('Waiting for host-anchored SSH server identity')
+    server = read_json(anchor if trusted else runtime_dir(run) / 'ssh-server.json')
+    host_event = run / 'host-activity.json'
     run = runtime_dir(run)
-    server = read_json(run / 'ssh-server.json')
     if server['token'] != token or server['jobID'] != job:
         raise ValueError('Wrong SSH server identity')
     root = int(server['pid'])
@@ -93,6 +114,13 @@ def probe(run, token, job, proc=pathlib.Path('/proc')):
     current = proc_info(root, proc)
     if current['start'] != server['start'] or current['state'] in ('Z', 'X'):
         raise ValueError('SSH server process changed')
+    expected_namespace = server.get('hostPidNamespace')
+    if expected_namespace and os.readlink(proc / str(root) / 'ns/pid') != expected_namespace:
+        raise ValueError('SSH server namespace changed')
+    executable = os.readlink(proc / str(root) / 'exe')
+    trusted_executables = {'/usr/sbin/sshd', '/usr/lib/openssh/sshd-session', '/usr/libexec/sshd-session'}
+    if executable != '/usr/sbin/sshd':
+        raise ValueError('SSH server executable changed')
     processes = {}
     for directory in proc.iterdir():
         if not directory.name.isdigit(): continue
@@ -103,21 +131,55 @@ def probe(run, token, job, proc=pathlib.Path('/proc')):
     for pid, info in processes.items():
         if info['state'] in ('Z', 'X'): continue
         parent, visited = info['ppid'], set()
+        chain_valid = True
         while parent in processes and parent != root and parent not in visited:
+            try:
+                if os.readlink(proc / str(parent) / 'exe') not in trusted_executables:
+                    chain_valid = False; break
+            except OSError:
+                chain_valid = False; break
             visited.add(parent); parent = processes[parent]['ppid']
-        if parent != root: continue
+        if parent != root or not chain_valid: continue
         try:
             title = (proc / str(pid) / 'cmdline').read_bytes().replace(b'\0', b' ').decode(errors='replace')
-            if authenticated.search(title): count += 1
+            if authenticated.search(title) and os.readlink(proc / str(pid) / 'exe') in trusted_executables: count += 1
         except OSError: pass
     last = 0
-    if (run / 'ssh-activity.json').exists():
-        event = read_json(run / 'ssh-activity.json')
+    activity = host_event if trusted else run / 'ssh-activity.json'
+    if activity.exists():
+        event = read_json(activity)
         if event['token'] != token or event['jobID'] != job:
             raise ValueError('Wrong connection event identity')
         last = float(event['lastAuthenticatedAt'])
     return {'token': token, 'jobID': job, 'connections': count,
-            'lastAuthenticatedAt': last, 'readyAt': server['readyAt']}
+            'lastAuthenticatedAt': last, 'readyAt': server['readyAt'],
+            'hostAnchored': trusted, 'serverHostPID': root}
+
+def anchor_server(run, launcher_pid, proc=pathlib.Path('/proc')):
+    token = (run / 'owner-token').read_text().strip()
+    job = (run / 'job-id').read_text().strip()
+    launcher_start = proc_info(launcher_pid, proc, require_owner=False)['start']
+    deadline = time.monotonic() + 90 * 60
+    while not (runtime_dir(run) / 'ssh-server.json').exists():
+        launcher = proc_info(launcher_pid, proc, require_owner=False)
+        if launcher['start'] != launcher_start or launcher['state'] in ('Z','X') or time.monotonic() >= deadline:
+            raise ValueError('Container startup did not establish an SSH server')
+        time.sleep(.2)
+    observation = probe(run, token, job, proc, anchoring=True)
+    root = observation['serverHostPID']
+    parent, visited = root, set()
+    while parent != launcher_pid and parent not in visited:
+        visited.add(parent)
+        parent = proc_info(parent, proc, require_owner=False)['ppid']
+        if parent <= 1: raise ValueError('SSH server does not belong to this container launch')
+    process = proc_info(root, proc)
+    if proc_info(launcher_pid, proc, require_owner=False)['start'] != launcher_start:
+        raise ValueError('Container launcher changed')
+    # Written only by the host batch process, outside the writable runtime bind.
+    atomic(run / 'server-identity.json', {'token':token,'jobID':job,'pid':root,
+           'start':process['start'],'user':pwd.getpwuid(os.getuid()).pw_name,
+           'hostPidNamespace':os.readlink(proc / str(root) / 'ns/pid'),
+           'readyAt':time.time()})
 
 def advance(entry, observation, now, idle_seconds=IDLE_SECONDS):
     """A connection renews only this exact allocation, never another sandbox."""
@@ -125,6 +187,11 @@ def advance(entry, observation, now, idle_seconds=IDLE_SECONDS):
     if observation['token'] != entry['token'] or observation['jobID'] != entry['jobID']:
         raise ValueError('Probe returned a different allocation')
     event = float(observation.get('lastAuthenticatedAt', 0))
+    ready = float(observation.get('readyAt', now))
+    if not math.isfinite(event) or event < 0 or event > now: event = 0
+    if not math.isfinite(ready) or ready < 0 or ready > now: ready = now
+    old_idle = result.get('idleSince')
+    if old_idle is not None and (not math.isfinite(float(old_idle)) or float(old_idle) > now): result['idleSince'] = now
     if observation['connections'] > 0:
         result.update(connected=True, idleSince=None)
     elif entry.get('connected') or event > entry.get('lastAuthenticatedAt', 0):
@@ -132,7 +199,7 @@ def advance(entry, observation, now, idle_seconds=IDLE_SECONDS):
     else:
         result['connected'] = False
         if result.get('idleSince') is None:
-            result['idleSince'] = max(float(observation['readyAt']), now)
+            result['idleSince'] = ready
     result['lastAuthenticatedAt'] = max(event, entry.get('lastAuthenticatedAt', 0))
     result['lastCheckedAt'] = now
     expire = result.get('idleSince') is not None and now - result['idleSince'] >= idle_seconds
@@ -170,7 +237,7 @@ def register(run, token, job, root=None):
             logfd = os.open(root / 'watchdog.log', os.O_CREAT | os.O_WRONLY | os.O_APPEND | os.O_NOFOLLOW, 0o600)
             try:
                 # Inherit the held lock: simultaneous registrations cannot start two monitors.
-                subprocess.Popen([sys.executable, str(pathlib.Path(__file__).resolve()),
+                subprocess.Popen([sys.executable, '-I', str(pathlib.Path(__file__).resolve()),
                                   'daemon', str(root), str(descriptor)],
                                  stdin=subprocess.DEVNULL, stdout=logfd, stderr=logfd,
                                  start_new_session=True, close_fds=True, pass_fds=(descriptor,))
@@ -215,13 +282,13 @@ def observe(entry, help_cache):
         # Host-side observation is required with --containall: a second private
         # container cannot inspect the service's PID namespace. No agent code or
         # writable script is executed on the host; the control directory is RO.
-        args += ['python3', str(run / 'watchdog.py'), 'probe', str(run),
+        args += ['python3', '-I', str(run / 'watchdog.py'), 'probe', str(run),
                  entry['token'], entry['jobID']]
         return json.loads(command(entry, args))
     image = (run / 'image').read_text().strip()
     apptainer = (run / 'apptainer').read_text().strip()
     args += [apptainer, 'exec', '--cleanenv', '--contain', '--bind',
-             str(run) + ':/run/vscode-launcher:ro', image, 'python3',
+             str(run) + ':/run/vscode-launcher:ro', image, 'python3', '-I',
              '/run/vscode-launcher/watchdog.py', 'probe', '/run/vscode-launcher',
              entry['token'], entry['jobID']]
     return json.loads(command(entry, args))
@@ -290,7 +357,9 @@ def monitor(root, descriptor, interval=POLL_SECONDS, idle_seconds=IDLE_SECONDS):
 def main():
     operation = sys.argv[1]
     if operation == 'register': register(pathlib.Path(sys.argv[2]), sys.argv[3], sys.argv[4])
+    elif operation == 'anchor': anchor_server(pathlib.Path(sys.argv[2]), int(sys.argv[3]))
     elif operation == 'server': record_server(pathlib.Path(sys.argv[2]), int(sys.argv[3]))
+    elif operation == 'connected-host': connected_host(pathlib.Path(sys.argv[2]), sys.argv[3], sys.argv[4])
     elif operation == 'connected': connected(pathlib.Path(sys.argv[2]))
     elif operation == 'probe': print(json.dumps(probe(pathlib.Path(sys.argv[2]), sys.argv[3], sys.argv[4])))
     elif operation == 'daemon': monitor(pathlib.Path(sys.argv[2]), int(sys.argv[3]))
@@ -298,6 +367,6 @@ def main():
 
 if __name__ == '__main__':
     try: main()
-    except Exception:
-        print('Watchdog operation failed; check server-side allocation metadata and Slurm access.', file=sys.stderr)
+    except Exception as error:
+        print('Watchdog operation failed ('+type(error).__name__+'): '+str(error), file=sys.stderr)
         sys.exit(1)

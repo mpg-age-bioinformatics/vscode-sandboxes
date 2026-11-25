@@ -7,6 +7,8 @@ package startui
 // Microsoft Container Registry firewall guidance, and VS Code network docs.
 func sitePresets() map[string][]string {
 	common := []string{
+		// Codex ChatGPT sign-in, token exchange and authenticated backend.
+		"auth.openai.com", "api.openai.com", "chatgpt.com", "chat.openai.com", "ab.chatgpt.com",
 		"docker.io", "registry-1.docker.io", "auth.docker.io", "hub.docker.com",
 		"production.cloudflare.docker.com", "production.cloudfront.docker.com",
 		"docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com",

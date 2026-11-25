@@ -1,10 +1,12 @@
 package startui
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -24,7 +26,14 @@ func prepareGlobalPolicy(s Selection, log io.Writer, confirm func(string) bool) 
 		fmt.Fprintln(log, "Initializing Docker network policy:", preset)
 		return command(log, "policy", "init", preset)
 	}
-	if s.Network != "restricted" || hasDenyDefault(listing) {
+	if s.Network != "restricted" {
+		return nil
+	}
+	denyDefault, err := verifyDenyDefault(listing)
+	if err != nil {
+		return err
+	}
+	if denyDefault {
 		return nil
 	}
 	other, err := output("ls")
@@ -63,6 +72,33 @@ func hasDenyDefault(table string) bool {
 		}
 	}
 	return false
+}
+
+func verifyDenyDefault(table string) (bool, error) {
+	if hasDenyDefault(table) {
+		return true, nil
+	}
+	// Docker 0.39 omits the implicit default from policy ls. Ask the daemon's
+	// authorizer without a sandbox context: its startup guard would otherwise
+	// make an allow-by-default installation appear safe. No network request runs.
+	result, err := output("policy", "check", "network", "--json", "https://vscode-sandboxes-default-probe.invalid")
+	var denied *exec.ExitError
+	if err != nil && (!errors.As(err, &denied) || denied.ExitCode() != 1) {
+		return false, fmt.Errorf("Verify Docker's default network decision: %w", err)
+	}
+	var decision struct {
+		Allowed *bool  `json:"allowed"`
+		Context string `json:"context"`
+		Kind    string `json:"deny_kind"`
+		Type    string `json:"type"`
+	}
+	if err := json.Unmarshal([]byte(result), &decision); err != nil || decision.Allowed == nil || decision.Context != "global" || decision.Type != "network" {
+		return false, errors.New("Docker returned an unsupported default network decision; startup remains blocked.")
+	}
+	if err != nil && *decision.Allowed {
+		return false, errors.New("Docker returned a contradictory default network decision; startup remains blocked.")
+	}
+	return !*decision.Allowed && decision.Kind == "implicit", nil
 }
 
 // allowedResources reads the CLI's documented rule-level table, locating
@@ -207,7 +243,14 @@ func applyNetwork(name string, s Selection, log io.Writer) error {
 	var owned []string
 	if s.Network == "restricted" {
 		listing, err := output("policy", "ls")
-		if err != nil || !hasDenyDefault(listing) {
+		if err != nil {
+			return fmt.Errorf("Inspect Docker network policy: %w", err)
+		}
+		denyDefault, err := verifyDenyDefault(listing)
+		if err != nil {
+			return err
+		}
+		if !denyDefault {
 			return errors.New("Restricted mode requires the confirmed shared deny-by-default policy. Startup remains blocked.")
 		}
 		requested, err := sites(s.Sites)

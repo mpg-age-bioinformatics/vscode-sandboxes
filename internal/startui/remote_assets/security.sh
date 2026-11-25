@@ -13,7 +13,7 @@ VSCODE_SECCOMP_POLICY
  chmod 600 "$run/seccomp-agents.json"
 }
 security_mounts() {
- python3 - "$project" "$HOME" "$state" "$image" "$run" "${1:-}" <<'VSCODE_MOUNTS'
+ python3 -I - "$project" "$HOME" "$state" "$image" "$run" "${1:-}" <<'VSCODE_MOUNTS'
 import os,pathlib,pwd,sys
 project,home,state,image,run,folders=sys.argv[1:]
 def variants(value):

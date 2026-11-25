@@ -4,7 +4,7 @@ set -euo pipefail
 cd -- "${1:-/workspace}"
 run=/run/vscode-launcher
 [[ -f "$run/project.tar" ]] || exit 0
-python3 - "$run/project.tar" <<'PY'
+python3 -I - "$run/project.tar" <<'PY'
 import json,os,pathlib,tarfile,sys
 root=pathlib.Path.cwd()
 for name in ['code/.sandbox','data','.vscode']:
@@ -51,7 +51,7 @@ with tarfile.open(sys.argv[1]) as archive:
         with dest.open(mode) as output: output.write(content)
         dest.chmod(member.mode & 0o777)
 PY
-source_type="$(python3 -c 'import json;print(json.load(open("code/.sandbox/remote-project.json"))["source"])')"
+source_type="$(python3 -I -c 'import json;print(json.load(open("code/.sandbox/remote-project.json"))["source"])')"
 export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
 if [[ "$source_type" == python || "$source_type" == r ]];then
  [[ ! -L code/INSTALL.md ]] || { echo 'Refusing a symlinked installation history.' >&2; exit 1; }
@@ -61,7 +61,7 @@ fi
 if [[ "${VSCODE_SANDBOX_NETWORK:-open}" == none ]]; then
  echo 'No internet: keeping prepared project packages; online package resolution and skills cloning are skipped.'
  if [[ "$source_type" == python ]]; then
-  [[ -x .venv/bin/python ]] || python3 -m venv .venv
+  [[ -x .venv/bin/python ]] || python3 -I -m venv .venv
   .venv/bin/python -m pip check
  elif [[ "$source_type" == r ]]; then
   mkdir -p .r-library
@@ -72,12 +72,12 @@ fi
 case "$source_type" in
  python)
   printf '%s\n' 'Preparing Python environment and locked packages' > "$run/runtime/startup-phase"
-  if [[ ! -x .venv/bin/python ]]; then python3 -m venv .venv;fi
+  if [[ ! -x .venv/bin/python ]]; then python3 -I -m venv .venv;fi
   # A previous allocation mounted this same project at /workspace. Refresh
   # virtualenv activation and locked entry points when adopting the exact path.
   install_args=()
   if [[ "$PWD" != /workspace && -f .venv/bin/activate ]] && grep -Fq '/workspace/.venv' .venv/bin/activate; then
-   python3 - <<'PYVENV'
+   python3 -I - <<'PYVENV'
 import os,venv
 builder=venv.EnvBuilder()
 builder.setup_scripts(builder.ensure_directories(os.path.abspath('.venv')))

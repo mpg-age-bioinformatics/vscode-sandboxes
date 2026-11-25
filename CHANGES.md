@@ -21,6 +21,95 @@ Add an entry for Unreleased changes when their release is tagged.
 
 ## Unreleased
 
+- Apply agent web-tool policy from Selected sites for both Local and Remote,
+  including existing project restarts and allocation reconnects. Configure
+  Codex domain filters, Claude search/fetch hooks, supported Chat domain
+  settings, and Continue revision-3 hosted-search blocking. Preserve endpoint
+  credentials, unrelated settings/hooks and approval prompts; restore managed
+  keys on Open. Document domain/subdomain differences, omitted port/IP rules,
+  provider/MCP limits and the user-writable configuration boundary in APPTAINER.md.
+  Validation: Go suite/vet, Python configuration/Claude-hook transitions,
+  Continue's shared-search guard and UI regressions passed. Codex 0.163.0 sent
+  the expected domain filters to a local mock Responses endpoint. Live Local
+  and Remote settings/package checks passed. Interactive hosted searches for
+  every provider and native Windows UI behavior were not exercised.
+
+- Include exact Codex/ChatGPT authentication and backend hosts in the visible
+  Selected sites defaults for every Local language preset. Existing edited
+  lists stay under user control; Restore default sites includes the corrected
+  entries. Docker's blocked-host log confirmed auth.openai.com, chatgpt.com,
+  chat.openai.com and ab.chatgpt.com were missing from the previous defaults.
+
+- Verify Docker's implicit default-deny decision with its read-only policy
+  authorizer when no named default rule appears in the listing. This fixes
+  Selected sites startup on Docker Sandboxes 0.39 without resetting an already
+  restrictive shared policy. Reject allowed, explicit-deny, sandbox-scoped and
+  malformed verification responses before removing the startup guard.
+
+- Bind an explicit read-only loopback hosts file into isolated Remote
+  containers. This fixes ChatGPT/Codex login callback forwarding failing to
+  resolve `localhost` under Selected sites, without enabling external DNS or
+  changing the egress allowlist. Apply the same fix to No internet loopback.
+
+- Selecting Remote → Start a new sandbox now releases the launcher's current
+  allocation selection and unlocks the form. The existing Slurm job stays
+  running and remains available under Connect to running sandboxes. An ongoing
+  startup still locks its settings until it completes.
+
+- Fix the SSH authentication callback consuming scripted container commands on
+  fresh connections. Use `ssh -n`, keep callback output off the protocol stdout,
+  and retain exact container-proof validation. Distinguish SSH transport errors,
+  empty successful responses and unexpected output instead of displaying `<nil>`.
+  Reproduced the empty response on a fresh connection to the existing allocation;
+  verified the complete container/job proof after correcting its managed hook.
+
+- Recover bounded shared-folder directory-creation races during Local setup.
+  Check existing directories first, retry only EEXIST-like creation errors,
+  preserve conflicting files, and retry the sandbox setup RPC once for the exact
+  `mkdir: Already exists` bridge failure. Recreate tar stdin on retry and keep
+  permission, Git and other setup failures visible. Apply the directory helper
+  to Python, R and bioinformatics project setup.
+  Directory and bridge-error regressions, self-contained setup, skills recovery,
+  the Go suite and vet passed. The partial Python project launcher was repaired
+  inside its existing sandbox; its live startup completed with Python 3.13.18,
+  Continue, Codex/Claude and the Codex command-sandbox check verified.
+
+- Harden trusted Python control scripts with isolated imports, blocking project
+  module shadowing before Apptainer starts and during host control operations.
+- Deliver desktop session capabilities over inherited pipes; use nonpersistent
+  macOS web storage and exact-origin navigation, and an ACL-protected temporary
+  bootstrap with Edge InPrivate on Windows. Unix askpass uses a private Unix
+  socket instead of exposing a cross-user reachable TCP authentication bridge.
+- Require HTTPS for private model endpoints except loopback, preserve Continue's
+  upstream permission prompts (distribution revision 2), and reject non-public
+  proxy destination IPs unless explicitly enabled for internal cluster access.
+- Anchor each new allocation's SSH server identity from the host batch process
+  outside container-writable metadata. Validate SSH executables and parent chains,
+  ignore writable heartbeats for anchored jobs, and reject future/non-finite
+  timestamps. Existing allocations need recreation. Short sessions are recorded
+  by the SSH client through an authenticated host login outside writable runtime
+  files. Retain fail-safe behavior on uncertain liveness.
+- Add security regression and vulnerability gates for pushes/pull requests,
+  with action commit pins and read-only repository permissions.
+- Build with Go 1.27.4 and update the retained toolchain notices. The patched
+  source vulnerability scan reports no vulnerabilities. Native Windows behavior
+  and real Raven password/2FA completion still require separate interactive tests.
+
+Security validation: the full Go suite, vet, UI regressions, targeted race checks,
+14 watchdog regressions, 7 network regressions, Continue distribution tests and
+editor provisioning fixtures passed. Source and rebuilt Windows-binary scans
+report no vulnerabilities. The native macOS app starts with no API capability in
+its process arguments; the installed user app was updated and verified. Rebuilt
+macOS/Windows packages include the patched toolchain and matching notices.
+
+Live checks on hpc.bioinformatics.studio passed for two ordinary allocations and
+for Selected sites/No internet allocations, using an existing SIF without a new
+image upload/build. Host-written server identity and client-authentication event
+checks passed. Restricted proxy use, blocked direct egress, offline isolation and
+extension registration passed. The tests cancelled only their own allocations.
+Native Windows operation, the GitHub workflow on hosted runners and completed
+Raven password/2FA authentication are not claimed by these checks.
+
 <a id="v1-2-1"></a>
 
 ## v1.2.1 — 2026-11-22

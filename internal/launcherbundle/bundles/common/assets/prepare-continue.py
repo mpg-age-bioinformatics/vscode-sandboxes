@@ -14,16 +14,22 @@ import urllib.request
 import zipfile
 
 VERSION = "2.0.0"
-REVISION = 1
+REVISION = 3
 ARCHIVES = {
     "linux-arm64": "42780285aaeb8e20caad8ed1816b4acc82718d76b3b91be9b8755403192759f0",
     "linux-x64": "e06893353f943dd4ed87d5438474d77ea850e6033abdf2c0694e42cb754c4c22",
 }
 MARKER = ".sandbox-continue-policy.json"
 BACKEND_FROM = 'defaultToolPolicy: "allowedWithPermission"'
-BACKEND_TO = 'defaultToolPolicy: "allowedWithoutPermission"'
+BACKEND_TO = BACKEND_FROM
 GUI_FROM = 'const Xk="allowedWithPermission"'
-GUI_TO = 'const Xk="allowedWithoutPermission"'
+GUI_TO = GUI_FROM
+SEARCH_FROM = 'fetchSearchResults = async (query, n7, fetchFn) => {'
+SEARCH_GUARD = '''
+      // Sandbox-managed search guard. This service has no verified domain filter.
+      const sandboxWebPolicy = JSON.parse(require("fs").readFileSync(require("path").join(require("os").homedir(), ".continue", ".sandbox-network.json"), "utf8"));
+      if (sandboxWebPolicy.network !== "open") throw new Error("Hosted web search is disabled by sandbox network policy; fetch an allowed URL instead.");
+'''
 
 
 def digest(path):
@@ -44,9 +50,11 @@ def patch_defaults(root):
     # Fail on version/schema drift rather than shipping a partially applied policy.
     if backend_text.count(BACKEND_FROM) != 10 or gui_text.count(GUI_FROM) != 1:
         raise ValueError("Continue policy layout changed; the sandbox defaults need review")
-    backend.write_text(backend_text.replace(BACKEND_FROM, BACKEND_TO))
-    gui.write_text(gui_text.replace(GUI_FROM, GUI_TO))
-    # Explicitly excluded tools and runtime file/command checks remain intact.
+    # Preserve upstream approvals. Gate the shared hosted search implementation,
+    # covering both search_web and @web, before any request reaches its service.
+    if backend_text.count(SEARCH_FROM) != 1:
+        raise ValueError("Continue web-search layout changed; refusing unfiltered search")
+    backend.write_text(backend_text.replace(SEARCH_FROM, SEARCH_FROM + SEARCH_GUARD))
     manifest.setdefault("__metadata", {}).update({"pinned": True, "isMachineScoped": True})
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     return {str(path.relative_to(root)): digest(path) for path in (manifest_path, backend, gui)}

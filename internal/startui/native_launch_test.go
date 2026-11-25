@@ -82,6 +82,14 @@ elif args[0]=='exec':
     name=rest.pop(0)
     if rest==['sh','-c','pwd -P']: print(os.path.realpath(project))
     elif rest[0]=='git' or (rest[:2]==['sh','-c'] and '/tmp/sandbox-setup.' in rest[2]):
+        if '/tmp/sandbox-setup.' in ' '.join(rest) and os.environ.get('NATIVE_TEST_SETUP_ERROR'):
+            marker=state+'.setup-attempts'
+            attempt=int(open(marker).read())+1 if os.path.exists(marker) else 1
+            open(marker,'w').write(str(attempt))
+            error=os.environ['NATIVE_TEST_SETUP_ERROR']
+            if error!='transient' or attempt==1:
+                print('mkdir: Already exists' if error in ('transient','persistent') else 'mkdir: Permission denied',file=sys.stderr)
+                sys.exit(1)
         env=dict(os.environ,PATH=os.environ['NATIVE_TEST_SANDBOX_PATH'])
         result=subprocess.run(rest,cwd=project,env=env)
         sys.exit(result.returncode)
@@ -256,5 +264,48 @@ func TestNativeRejectsStaleSetupHistoryBeforeRuntime(t *testing.T) {
 	commands, _ := os.ReadFile(audit)
 	if strings.Contains(string(commands), "start-development-container.sh") {
 		t.Fatal("initialized runtime before checking repository history")
+	}
+}
+
+func TestSetupRetryOnlyForDirectoryBridgeRace(t *testing.T) {
+	for _, kind := range []string{"transient", "persistent", "permission"} {
+		t.Run(kind, func(t *testing.T) {
+			s, executable, _ := nativeFixture(t, "python-sandbox")
+			t.Setenv("NATIVE_TEST_SETUP_ERROR", kind)
+			var log bytes.Buffer
+			err := setupInSandbox("fixture", s.Project, s, executable, "windows", &log)
+			if (err == nil) != (kind == "transient") {
+				t.Fatalf("unexpected setup result %v: %s", err, log.String())
+			}
+			attempts, readErr := os.ReadFile(os.Getenv("NATIVE_TEST_STATE") + ".setup-attempts")
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			expected := "2"
+			if kind == "permission" {
+				expected = "1"
+			}
+			if string(attempts) != expected {
+				t.Fatal("wrong retry count", string(attempts), expected)
+			}
+			if kind == "transient" {
+				if _, err := os.Stat(filepath.Join(s.Project, "code/.sandbox/Run Python Sandbox.exe")); err != nil {
+					t.Fatal("retry lost the setup payload", err)
+				}
+			}
+		})
+	}
+}
+
+func TestDirectoryBridgeErrorAcrossChunksIsBounded(t *testing.T) {
+	var writer setupDirectoryRaceWriter
+	for _, chunk := range []string{strings.Repeat("noise", 4096), "mkdir: Al", "ready exists", strings.Repeat("noise", 4096)} {
+		writer.Write([]byte(chunk))
+		if len(writer.tail) >= len("mkdir: Already exists") {
+			t.Fatal("retained unbounded setup stderr")
+		}
+	}
+	if !writer.found {
+		t.Fatal("lost bridge failure across chunks")
 	}
 }

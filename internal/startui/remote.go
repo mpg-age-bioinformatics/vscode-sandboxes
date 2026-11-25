@@ -27,33 +27,34 @@ import (
 var remoteAssets embed.FS
 
 type RemoteProfile struct {
-	Network          string   `json:"network,omitempty"`
-	Sites            string   `json:"sites,omitempty"`
-	EditorCommit     string   `json:"editorCommit,omitempty"`
-	EditorExtensions []string `json:"editorExtensions,omitempty"`
-	Login            string   `json:"login"`
-	Project          string   `json:"project"`
-	Data             string   `json:"data,omitempty"` // Legacy preferences only.
-	Folders          string   `json:"folders,omitempty"`
-	StateDir         string   `json:"stateDir"`
-	ImagesDir        string   `json:"imagesDir"`
-	CachedImage      string   `json:"cachedImage,omitempty"`
-	CachedSource     string   `json:"cachedSource,omitempty"`
-	Image            string   `json:"image"`
-	ImageSource      string   `json:"imageSource,omitempty"`
-	Version          string   `json:"version,omitempty"`
-	Dockerfile       string   `json:"dockerfile,omitempty"`
-	Architecture     string   `json:"architecture,omitempty"`
-	Partition        string   `json:"partition"`
-	Account          string   `json:"account,omitempty"` // Legacy preferences, never submitted.
-	CPUs             int      `json:"cpus"`
-	Memory           string   `json:"memory"`
-	Time             string   `json:"time"`
-	GPUs             int      `json:"gpus"`
-	Apptainer        string   `json:"apptainer"`
-	Modules          string   `json:"modules"` // Optional advanced shell initialization.
-	ModuleNames      string   `json:"moduleNames,omitempty"`
-	WaitMinutes      int      `json:"waitMinutes"`
+	AllowPrivateNetwork bool     `json:"allowPrivateNetwork,omitempty"`
+	Network             string   `json:"network,omitempty"`
+	Sites               string   `json:"sites,omitempty"`
+	EditorCommit        string   `json:"editorCommit,omitempty"`
+	EditorExtensions    []string `json:"editorExtensions,omitempty"`
+	Login               string   `json:"login"`
+	Project             string   `json:"project"`
+	Data                string   `json:"data,omitempty"` // Legacy preferences only.
+	Folders             string   `json:"folders,omitempty"`
+	StateDir            string   `json:"stateDir"`
+	ImagesDir           string   `json:"imagesDir"`
+	CachedImage         string   `json:"cachedImage,omitempty"`
+	CachedSource        string   `json:"cachedSource,omitempty"`
+	Image               string   `json:"image"`
+	ImageSource         string   `json:"imageSource,omitempty"`
+	Version             string   `json:"version,omitempty"`
+	Dockerfile          string   `json:"dockerfile,omitempty"`
+	Architecture        string   `json:"architecture,omitempty"`
+	Partition           string   `json:"partition"`
+	Account             string   `json:"account,omitempty"` // Legacy preferences, never submitted.
+	CPUs                int      `json:"cpus"`
+	Memory              string   `json:"memory"`
+	Time                string   `json:"time"`
+	GPUs                int      `json:"gpus"`
+	Apptainer           string   `json:"apptainer"`
+	Modules             string   `json:"modules"` // Optional advanced shell initialization.
+	ModuleNames         string   `json:"moduleNames,omitempty"`
+	WaitMinutes         int      `json:"waitMinutes"`
 }
 
 type RemoteSession struct {
@@ -201,7 +202,7 @@ func remoteAsset(name string) string {
 	}
 	if strings.Contains(result, "# VSCODE_CONTINUE_ASSETS") {
 		var scripts strings.Builder
-		for _, file := range []string{"prepare-continue.py", "install-continue.js"} {
+		for _, file := range []string{"prepare-continue.py", "install-continue.js", "agent-network.py"} {
 			data, err := launcherbundle.CommonAsset(file)
 			if err != nil {
 				panic(err)
@@ -571,8 +572,8 @@ func (p *remoteController) launch(ctx context.Context, session RemoteSession, re
 			p.phase("Checking the container SSH endpoint")
 			alias := "vscode-sandboxes-" + session.Token
 			proof, err := p.ssh(waitCtx, alias, `set -eu; test -r /run/vscode-launcher/sshd_config; test "$VSCODE_SANDBOX_REMOTE_CONTAINER" = "$1"; command -v codex >/dev/null; test -w "$HOME"; printf 'CONTAINER_OK\n'`, session.JobID)
-			if err != nil || strings.TrimSpace(proof) != "CONTAINER_OK" {
-				return fmt.Errorf("Could not verify that SSH terminates inside the allocated Apptainer container: %v", err)
+			if err := verifyRemoteContainerProof(proof, err); err != nil {
+				return err
 			}
 			if connection.Reset || connection.BaseURL != "" || connection.APIKey != "" {
 				if session.ProjectPath == "" {
@@ -585,6 +586,10 @@ func (p *remoteController) launch(ctx context.Context, session RemoteSession, re
 				if err := p.configureEndpoint(waitCtx, alias, connection); err != nil {
 					return err
 				}
+			}
+			p.phase("Configuring agent web tools")
+			if _, err := p.ssh(waitCtx, alias, "/usr/bin/python3 -I -c "+remoteQuote(agentNetworkScript())+" <<'VSCODE_AGENT_NETWORK'\n"+remoteProfileJSON(session.Profile)+"\nVSCODE_AGENT_NETWORK\n"+agentNetworkInstallScript()); err != nil {
+				return fmt.Errorf("Configure remote agent web tools: %w", err)
 			}
 			p.phase("Opening VS Code inside Apptainer")
 			if err := openRemoteEditor(waitCtx, alias, p, session.Profile, session.ProjectPath); err != nil {
@@ -609,6 +614,20 @@ func (p *remoteController) launch(ctx context.Context, session RemoteSession, re
 		case <-timer.C:
 		}
 	}
+}
+
+func verifyRemoteContainerProof(proof string, commandErr error) error {
+	const prefix = "Could not verify that SSH terminates inside the allocated Apptainer container"
+	if commandErr != nil {
+		return fmt.Errorf("%s: %w", prefix, commandErr)
+	}
+	if strings.TrimSpace(proof) == "" {
+		return errors.New(prefix + ": SSH exited successfully without returning the container proof. The remote command may not have received its input; reconnect to retry.")
+	}
+	if strings.TrimSpace(proof) != "CONTAINER_OK" {
+		return fmt.Errorf("%s: SSH returned unexpected output (%d bytes). Check non-interactive shell startup messages; verification remains blocked.", prefix, len(proof))
+	}
+	return nil
 }
 
 func sshConfigQuote(value string) string {
@@ -649,9 +668,19 @@ func prepareRemoteSSH(s RemoteSession, hostKey string) error {
 		return err
 	}
 	proxy := quote(filepath.ToSlash(binary)) + " " + proxyOptions + " " + s.Profile.Login + " " + quote(remoteCommand)
+	// LocalCommand runs on the laptop only after container SSH authentication.
+	// Its outer login writes an event outside the agent-writable runtime mount,
+	// retaining short sessions without trusting the container's own heartbeat.
+	activityScript := "if [ -f " + remoteQuote(s.RunDir+"/watchdog-policy") + " ]; then python3 -I " + remoteQuote(s.RunDir+"/watchdog.py") + " connected-host " + remoteQuote(s.RunDir) + " " + remoteQuote(s.Token) + " " + remoteQuote(s.JobID) + "; fi"
+	activityCommand := quote(filepath.ToSlash(binary)) + " -n " + proxyOptions + " " + s.Profile.Login + " " + quote("bash -c "+remoteQuote(activityScript))
+	// LocalCommand shares the SSH client's descriptors. Never let its SSH
+	// process read the workspace script/upload, or print into the proof/JSON stream.
+	activityCommand += " 1>&2"
+	activityCommand = strings.ReplaceAll(activityCommand, "%", "%%")
 	// OpenSSH expands percent tokens even inside quoted ProxyCommand arguments.
 	proxy = strings.ReplaceAll(proxy, "%", "%%")
 	text := fmt.Sprintf("Host %s\n  HostName 127.0.0.1\n  Port %d\n  User %s\n  ProxyCommand %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  IdentityAgent none\n  HostKeyAlias %s\n  UserKnownHostsFile %s\n  StrictHostKeyChecking yes\n  ForwardAgent no\n  ServerAliveInterval 30\n  ServerAliveCountMax 3\n", alias, s.Port, s.User, proxy, sshConfigQuote(filepath.ToSlash(filepath.Join(dir, "id_ed25519"))), alias, sshConfigQuote(filepath.ToSlash(known)))
+	text += "  PermitLocalCommand yes\n  LocalCommand " + activityCommand + "\n"
 	managed := filepath.Join(settingsDir(), "remote-ssh")
 	if err := privateWrite(filepath.Join(managed, s.Token+".conf"), []byte(text)); err != nil {
 		return err

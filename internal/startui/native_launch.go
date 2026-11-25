@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -174,6 +175,9 @@ func launchSandbox(s Selection, log io.Writer, executable string) error {
 			return err
 		}
 	}
+	if err := applyLocalAgentNetwork(name, workspace, s, log); err != nil {
+		return err
+	}
 	if err := finalizeProject(s, name, log); err != nil {
 		return err
 	}
@@ -305,12 +309,43 @@ if [ "$slug" = bioinformatics-sandbox ]; then
 else
   bash "$payload/setup/scripts/setup-project.sh" "$PWD" "$version" both
 fi`
-	cmd := Command("sbx", "exec", "-i", "--workdir", workspace, name, "sh", "-c", script, "setup", platform, label, s.Version, s.Sandbox)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = &archive, log, log
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("Project setup inside the sandbox failed: %w", err)
+	for attempt := 0; attempt < 2; attempt++ {
+		// Re-create stdin and the process: exec.Cmd and an exhausted tar reader are
+		// single-use. The setup script preserves existing/nonidentical files.
+		var directoryRace setupDirectoryRaceWriter
+		cmd := Command("sbx", "exec", "-i", "--workdir", workspace, name, "sh", "-c", script, "setup", platform, label, s.Version, s.Sandbox)
+		cmd.Stdin = bytes.NewReader(archive.Bytes())
+		cmd.Stdout, cmd.Stderr = log, io.MultiWriter(log, &directoryRace)
+		if err := cmd.Run(); err != nil {
+			// The workspace bridge can fail the RPC before mkdir's shell-side recovery
+			// runs. Retry once for this exact error, never general setup/Git failures.
+			if attempt == 0 && directoryRace.found {
+				fmt.Fprintln(log, "Retrying project setup after a temporary shared-folder directory conflict…")
+				continue
+			}
+			return fmt.Errorf("Project setup inside the sandbox failed: %w", err)
+		}
+		return nil
 	}
-	return nil
+	return errors.New("Project setup retry exhausted")
+}
+
+// Detect the bridge's narrow retryable error without retaining arbitrary setup
+// stderr. Keep only enough tail bytes to match across pipe-read boundaries.
+type setupDirectoryRaceWriter struct {
+	tail  string
+	found bool
+}
+
+func (w *setupDirectoryRaceWriter) Write(data []byte) (int, error) {
+	const message = "mkdir: Already exists"
+	text := w.tail + string(data)
+	w.found = w.found || strings.Contains(text, message)
+	if len(text) >= len(message) {
+		text = text[len(text)-len(message)+1:]
+	}
+	w.tail = text
+	return len(data), nil
 }
 
 func copyLaunchFile(source, destination string) error {

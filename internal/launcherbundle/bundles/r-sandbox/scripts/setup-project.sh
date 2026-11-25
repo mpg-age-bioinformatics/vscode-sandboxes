@@ -26,11 +26,11 @@ esac
 IFS=. read -r r_major r_minor _ <<< "$r_version"
 image_version="$r_major.$r_minor"
 cd "$target_dir"
-mkdir -p code/.sandbox data .vscode .r-library
 
 skills_setup="$skill_dir/assets/setup-skills.sh"
 if [[ ! -f "$skills_setup" ]]; then skills_setup="$skill_dir/../common/assets/setup-skills.sh"; fi
 source "$skills_setup"
+ensure_sandbox_directory code/.sandbox data .vscode .r-library
 setup_sandbox_skills "$skills_repository"
 
 install_if_absent_or_identical() {
@@ -38,7 +38,7 @@ install_if_absent_or_identical() {
   if [[ -e "$destination_path" ]]; then
     cmp -s "$source_path" "$destination_path" || { echo "Error: refusing to overwrite existing $destination_path" >&2; exit 1; }
   else
-    mkdir -p "$(dirname -- "$destination_path")"
+    ensure_sandbox_directory "$(dirname -- "$destination_path")"
     cp "$source_path" "$destination_path"
   fi
 }
@@ -84,7 +84,7 @@ if [[ -n "$project_app_template" ]]; then
   install_if_absent_or_identical "$generated_agent" code/.sandbox/.r-sandbox-agent
   setup_paths+=(code/.sandbox/.r-sandbox-agent)
   [[ -d "$project_app_template" && -f "$project_app_icon" ]] || { echo "Error: bundled macOS project launcher is incomplete." >&2; exit 1; }
-  mkdir -p "code/.sandbox/Run R Sandbox.app/Contents/MacOS" "code/.sandbox/Run R Sandbox.app/Contents/Resources"
+  ensure_sandbox_directory "code/.sandbox/Run R Sandbox.app/Contents/MacOS" "code/.sandbox/Run R Sandbox.app/Contents/Resources"
   install_if_absent_or_identical "$project_app_template/Contents/Info.plist" "code/.sandbox/Run R Sandbox.app/Contents/Info.plist"
   install_if_absent_or_identical "$project_app_template/Contents/MacOS/run-r-sandbox" "code/.sandbox/Run R Sandbox.app/Contents/MacOS/run-r-sandbox"
   install_if_absent_or_identical "$project_app_icon" "code/.sandbox/Run R Sandbox.app/Contents/Resources/RSandbox.icns"
@@ -144,7 +144,7 @@ git init
 if [[ -z "$(git config user.name || true)" ]]; then git config user.name 'Sandbox Launcher'; fi
 if [[ -z "$(git config user.email || true)" ]]; then git config user.email 'sandbox@localhost'; fi
 hooks_dir="$(git rev-parse --git-path hooks)"
-mkdir -p "$hooks_dir"
+ensure_sandbox_directory "$hooks_dir"
 if [[ -f "$hooks_dir/pre-commit" ]] && ! cmp -s "$skill_dir/assets/pre-commit" "$hooks_dir/pre-commit"; then
   if [[ ! -e "$hooks_dir/pre-commit.before-sandbox" ]]; then
     mv "$hooks_dir/pre-commit" "$hooks_dir/pre-commit.before-sandbox"

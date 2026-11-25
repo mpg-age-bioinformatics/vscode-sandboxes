@@ -26,7 +26,7 @@ spec.loader.exec_module(module)
 def fixture(path, bad_path=False, backend_count=10):
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("extension/package.json", json.dumps({"name":"continue","publisher":"Continue","version":"2.0.0"}))
-        archive.writestr("extension/out/extension.js", "const tools=[" + ",".join('{'+module.BACKEND_FROM+'}' for _ in range(backend_count)) + ',{defaultToolPolicy: "disabled"}];')
+        archive.writestr("extension/out/extension.js", "const tools=[" + ",".join('{'+module.BACKEND_FROM+'}' for _ in range(backend_count)) + ',{defaultToolPolicy: "disabled"}];let fetchSearchResults;'+module.SEARCH_FROM+'return "fixture-result";};')
         archive.writestr("extension/gui/assets/index.js", module.GUI_FROM + ';')
         archive.writestr("extension/LICENSE", "Vendor license fixture")
         if bad_path:
@@ -45,14 +45,23 @@ with tempfile.TemporaryDirectory(prefix="continue-distribution-") as temporary:
         assert module.valid_bundle(package,target)
         assert (package/"LICENSE").read_text()=="Vendor license fixture"
         backend=(package/"out/extension.js").read_text()
-        assert module.BACKEND_FROM not in backend and backend.count(module.BACKEND_TO)==10
+        assert backend.count(module.BACKEND_FROM)==10 and 'allowedWithoutPermission' not in backend
         assert 'defaultToolPolicy: "disabled"' in backend, "Excluded tools must remain excluded"
         # Evaluate actual generated defaults in a new JS process, with no user storage.
         result=subprocess.run(['node','-e',backend+';console.log(JSON.stringify(tools.map(t=>t.defaultToolPolicy)))'],capture_output=True,text=True,check=True)
-        assert json.loads(result.stdout)==['allowedWithoutPermission']*10+['disabled']
+        assert json.loads(result.stdout)==['allowedWithPermission']*10+['disabled']
         gui=(package/"gui/assets/index.js").read_text()
         result=subprocess.run(['node','-e',gui+';console.log(Xk)'],capture_output=True,text=True,check=True)
-        assert result.stdout.strip()=='allowedWithoutPermission'
+        assert result.stdout.strip()=='allowedWithPermission'
+        # The shared search function covers both the tool and @web provider.
+        policy_home=directory/'policy-home';(policy_home/'.continue').mkdir(parents=True)
+        for mode,allowed in [('restricted',False),('none',False),('open',True)]:
+            (policy_home/'.continue/.sandbox-network.json').write_text(json.dumps({'network':mode}))
+            result=subprocess.run(['node','-e',backend+';fetchSearchResults("test",5,()=>{throw Error("must not fetch")}).then(x=>console.log(x)).catch(e=>{console.error(e.message);process.exit(2)})'],capture_output=True,text=True,env={**os.environ,'HOME':str(policy_home)})
+            assert (result.returncode==0)==allowed,(mode,result.stderr)
+        (policy_home/'.continue/.sandbox-network.json').unlink()
+        result=subprocess.run(['node','-e',backend+';fetchSearchResults("test",5,null).catch(e=>process.exit(2))'],env={**os.environ,'HOME':str(policy_home)})
+        assert result.returncode==2,'Missing policy must not grant search access'
         assert json.loads((package/"package.json").read_text())["__metadata"]["pinned"] is True
         # Cached preparation must work with networking unavailable.
         home=directory/"home"

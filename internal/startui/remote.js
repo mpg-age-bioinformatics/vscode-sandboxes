@@ -23,7 +23,7 @@
   element('remoteDockerfileRow').hidden=source!=='dockerfile';element('remoteArchitectureRow').hidden=!build;element('remoteBuildNotice').hidden=!build;
   element('remoteSourceHint').textContent=preset||source==='bioinformatics'?'Uses the same base image and project layout as Local, with an Apptainer runtime.':source==='cached'?'Automatically lists ready images from this server. Choose one below to reuse its original environment.':source==='sif'?'Opens your existing image without rebuilding it.':'Adds SSH, VS Code and agent dependencies and retains the complete Dockerfile.';
  }
- function profile(){const result={};for(const [key,id]of Object.entries(fields)){const value=element(id).value;result[key]=numeric.has(key)?Number(value):key==='modules'?value:value.trim();}result.folders=csv(result.folders);result.moduleNames=csv(result.moduleNames);result.cachedImage=result.imageSource==='cached'?element('remoteCachedImage').value:'';result.dockerfile=result.imageSource==='dockerfile'?dockerfile:'';if(!['python','r'].includes(result.imageSource))result.version='';return result;}
+ function profile(){const result={};for(const [key,id]of Object.entries(fields)){const value=element(id).value;result[key]=numeric.has(key)?Number(value):key==='modules'?value:value.trim();}result.allowPrivateNetwork=!!element('remoteAllowPrivateNetwork').checked;result.folders=csv(result.folders);result.moduleNames=csv(result.moduleNames);result.cachedImage=result.imageSource==='cached'?element('remoteCachedImage').value:'';result.dockerfile=result.imageSource==='dockerfile'?dockerfile:'';if(!['python','r'].includes(result.imageSource))result.version='';return result;}
  function endpointSelection(){
   const baseURL=element('remoteEndpointURL').value.trim(),apiKey=element('remoteEndpointKey').value.trim();
   if(!baseURL&&!apiKey)return {};
@@ -122,7 +122,7 @@
   for(const item of data.sandboxes||[])presetVersions[item.slug.replace('-sandbox','')]=item.version;
   const profile=status.session?.active?status.session.profile:data.profile;
   for(const [key,id]of Object.entries(fields))element(id).value=profile[key]??'';
-  element('remoteNetwork').value=profile.network||'open';
+  element('remoteNetwork').value=profile.network||'open';element('remoteAllowPrivateNetwork').checked=!!profile.allowPrivateNetwork;
   element('remoteImagesDir').value=profile.imagesDir||'~/.local/share/vscode-sandboxes/images';
   element('remoteProject').value=profile.project||'~/sandboxes';element('remotePartition').value=profile.partition||'cluster';element('remoteCPUs').value=profile.cpus??1;element('remoteFolders').value=profile.folders||profile.data||'';
   element('remoteImageSource').value=profile.imageSource||(profile.image?'sif':'python');element('remoteArchitecture').value=profile.architecture||'amd64';element('remoteVersion').value=profile.version||presetVersions[element('remoteImageSource').value]||'';lastSource=element('remoteImageSource').value;
@@ -222,7 +222,13 @@
   finally{requesting=false;render();}
  });
 
- function selectRemoteMode(connect){
+ async function selectRemoteMode(connect){
+  // Choosing New is also the existing "Start another sandbox" operation.
+  // Release only the launcher's saved selection; never cancel the Slurm job.
+  if(!connect&&loaded&&!requesting&&!status.running&&status.session?.active){
+   await action('remote/detach',{});
+   if(clientError)return;
+  }
   connectMode=connect;
   render();
   if(!loaded||requesting||status.running)return;

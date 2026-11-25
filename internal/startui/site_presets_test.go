@@ -17,6 +17,11 @@ func TestSitePresetsFollowSandboxLanguage(t *testing.T) {
 	}
 	for _, sandbox := range Catalog() {
 		hosts := presets[sandbox.Slug]
+		for _, host := range []string{"auth.openai.com", "api.openai.com", "chatgpt.com", "chat.openai.com", "ab.chatgpt.com"} {
+			if !contains(hosts, host) {
+				t.Errorf("%s is missing Codex authentication/backend host %s", sandbox.Slug, host)
+			}
+		}
 		parsed, err := sites(strings.Join(hosts, "\n"))
 		if err != nil || len(parsed) != len(hosts) {
 			t.Fatalf("%s contains invalid or duplicate hosts: %v", sandbox.Slug, err)

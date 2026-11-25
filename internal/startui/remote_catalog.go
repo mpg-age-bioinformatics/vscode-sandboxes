@@ -55,7 +55,7 @@ func (p *remoteController) catalog(ctx context.Context, profile RemoteProfile, o
 	if err != nil {
 		return err
 	}
-	script := "{\n" + remoteModuleScript(profile) + "\n} >&2\nexec python3 - \"$@\" <<'VSCODE_CATALOG_PY'\n" + remoteAsset("catalog.py") + "\nVSCODE_CATALOG_PY\n"
+	script := "{\n" + remoteModuleScript(profile) + "\n} >&2\nexec python3 -I - \"$@\" <<'VSCODE_CATALOG_PY'\n" + remoteAsset("catalog.py") + "\nVSCODE_CATALOG_PY\n"
 	output, err := p.ssh(ctx, profile.Login, script, operation, profile.ImagesDir, profile.StateDir, string(data))
 	if err != nil {
 		return err

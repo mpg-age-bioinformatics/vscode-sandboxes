@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -146,4 +147,33 @@ if command -v Rscript >/dev/null;then Rscript --vanilla -e 'stopifnot(sum(1:10)=
 		t.Fatal(out, err)
 	}
 	t.Log("SECURITY_VERIFIED", s.JobID, out)
+}
+
+func TestRemoteMountValidatorRejectsProjectImportHijacking(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell fixture")
+	}
+	root := remoteTestHome(t)
+	project := filepath.Join(root, "project")
+	if err := os.MkdirAll(project, 0700); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(project, "host-executed")
+	// Without isolated Python this executes before path validation even starts.
+	payload := "open(" + strconv.Quote(marker) + ",'w').write('escaped')\nraise SystemExit(73)\n"
+	for _, name := range []string{"pathlib.py", "json.py", "sitecustomize.py"} {
+		if err := os.WriteFile(filepath.Join(project, name), []byte(payload), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	command := exec.Command("bash", "-s", "--", project, root)
+	command.Dir = project
+	command.Env = append(os.Environ(), "PYTHONPATH="+project)
+	command.Stdin = strings.NewReader(remoteAsset("security.sh") + "\nproject=$1; HOME=$2; state=$2/state; image=$2/image.sif; run=$2/state/run; security_mounts ''\n")
+	if data, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("isolated validator failed: %v %s", err, data)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("project Python module executed on host", err)
+	}
 }

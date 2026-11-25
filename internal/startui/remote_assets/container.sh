@@ -5,23 +5,23 @@ umask 077
 node="$1"; job="$2"
 run=/run/vscode-launcher
 status="$run/runtime"
-python3 - <<'PYSECURITY'
+python3 -I - <<'PYSECURITY'
 # VSCODE_VERIFY_SECURITY
 PYSECURITY
-network="$(python3 -c 'import json;print(json.load(open("/run/vscode-launcher/profile.json")).get("network") or "open")')"
+network="$(python3 -I -c 'import json;print(json.load(open("/run/vscode-launcher/profile.json")).get("network") or "open")')"
 bridge="";ssh_bridge=""
 if [[ "$network" != open ]]; then
- python3 "$run/network.py" verify "$(cat "$run/host-network-namespace")"
+ python3 -I "$run/network.py" verify "$(cat "$run/host-network-namespace")"
  if [[ "$network" == restricted ]]; then
-  proxy_port="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
-  python3 "$run/network.py" proxy-bridge /run/vscode-network "$proxy_port" &
+  proxy_port="$(python3 -I -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
+  python3 -I "$run/network.py" proxy-bridge /run/vscode-network "$proxy_port" &
   bridge=$!
   export HTTP_PROXY="http://127.0.0.1:$proxy_port" HTTPS_PROXY="http://127.0.0.1:$proxy_port" ALL_PROXY="http://127.0.0.1:$proxy_port"
   export http_proxy="$HTTP_PROXY" https_proxy="$HTTPS_PROXY" all_proxy="$ALL_PROXY"
   export NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1 NODE_USE_ENV_PROXY=1
   # Readiness requires the actual host gateway; a failed bridge never enables
   # direct traffic. A deliberately denied request must return HTTP 403.
-  python3 - "$proxy_port" <<'PYPROXY'
+  python3 -I - "$proxy_port" <<'PYPROXY'
 import socket,sys,time
 for attempt in range(100):
  try:
@@ -47,9 +47,10 @@ done
 printf '%s\n' 'Preparing project environment' > "$status/startup-phase"
 if [[ -f "$run/initialize-project.sh" ]]; then bash "$run/initialize-project.sh" "$project";fi
 printf '%s\n' 'Installing verified Continue extension inside the container' > "$status/startup-phase"
+/usr/bin/python3 -I "$run/agent-network.py" "$run/profile.json"
 echo 'Preparing pinned Continue extension in the remote VS Code extension home…'
 if ! node "$run/install-continue.js" check; then
- bundle="$(python3 "$run/prepare-continue.py")"
+ bundle="$(python3 -I "$run/prepare-continue.py")"
  tar -C "$(dirname -- "$bundle")" -cf - "$(basename -- "$bundle")" | node "$run/install-continue.js" install
 fi
 printf '%s\n' 'Starting container SSH service' > "$status/startup-phase"
@@ -59,7 +60,7 @@ mkdir -p "$HOME/.vscode-server" "$HOME/.codex" "$HOME/.claude"
 chmod 700 "$HOME/.codex" "$HOME/.claude"
 # VS Code otherwise inherits the HPC passwd entry, which can be /bin/sh.
 # Configure allocation-local remote settings, preserving explicit user choices.
-python3 - <<'PYEDITOR'
+python3 -I - <<'PYEDITOR'
 import json,os,pathlib,tempfile
 for name in ('.vscode-server','.vscode-server-insiders'):
     target=pathlib.Path.home()/name/'data/Machine/settings.json'
@@ -78,7 +79,7 @@ for name in ('.vscode-server','.vscode-server-insiders'):
     os.replace(temporary,target)
 PYEDITOR
 if [[ ! -f "$status/host_key" ]]; then ssh-keygen -q -t ed25519 -N '' -f "$status/host_key";fi
-port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+port="$(python3 -I -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
 network_env=""
 if [[ "$network" != open ]]; then
  network_env="VSCODE_SANDBOX_NETWORK=$network"
@@ -120,7 +121,7 @@ trap 'exit 143' TERM HUP INT
 ready=0
 for ((attempt=0;attempt<30;attempt++)); do
   kill -0 "$pid" || { echo 'Container SSH service exited.' >&2; exit 1; }
-  if python3 - "$port" <<'PY'
+  if python3 -I - "$port" <<'PY'
 import socket,sys
 with socket.create_connection(('127.0.0.1',int(sys.argv[1])),timeout=1) as stream:
     if not stream.recv(128).startswith(b'SSH-'): sys.exit(1)
@@ -130,7 +131,7 @@ PY
 done
 [[ "$ready" == 1 ]] || { echo 'Container SSH service did not become ready.' >&2; exit 1; }
 if [[ "$network" != open ]]; then
- python3 "$run/network.py" ssh-bridge /run/vscode-ssh "$port" &
+ python3 -I "$run/network.py" ssh-bridge /run/vscode-ssh "$port" &
  ssh_bridge=$!
  for ((attempt=0;attempt<100;attempt++)); do
   kill -0 "$ssh_bridge" || { echo 'SSH socket bridge failed.' >&2; exit 1; }
@@ -140,7 +141,7 @@ if [[ "$network" != open ]]; then
  [[ -S /run/vscode-ssh/ssh.sock ]] || { echo 'SSH socket bridge did not become ready.' >&2; exit 1; }
 fi
 if [[ -f "$run/watchdog.py" ]]; then
- python3 "$run/watchdog.py" server "$run" "$pid"
+ python3 -I "$run/watchdog.py" server "$run" "$pid"
 fi
 printf 'HOST=%s\nPORT=%s\nUSER=%s\nJOB=%s\nPROJECT=%s\n' "$node" "$port" "$user" "$job" "$project" > "$status/ready.tmp"
 cat "$status/host_key.pub" >> "$status/ready.tmp"

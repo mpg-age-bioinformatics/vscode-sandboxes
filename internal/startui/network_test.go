@@ -31,6 +31,7 @@ func mockSBX(t *testing.T) string {
 	t.Setenv("GLOBAL", filepath.Join(dir, "global"))
 	t.Setenv("TABLE", filepath.Join(dir, "table"))
 	t.Setenv("AUTH_MARKER", filepath.Join(dir, "auth"))
+	t.Setenv("DECISION", "")
 	os.WriteFile(os.Getenv("GLOBAL"), []byte(denyDefault), 0600)
 	os.WriteFile(os.Getenv("TABLE"), []byte(ruleTable), 0600)
 	script := `#!/bin/bash
@@ -39,6 +40,7 @@ printf '%s\n' "$*" >> "$TRACE"
 case "$1 ${2:-}" in
  'daemon status') echo '{"status":"running"}';;
  'policy ls') if [[ "${3:-}" == test-sandbox ]];then cat "$TABLE";else cat "$GLOBAL";fi;;
+ 'policy check') if [[ -n "$DECISION" ]];then printf '%s' "$DECISION";exit 1;elif [[ "$(cat "$GLOBAL")" == *default-allow-all* ]];then echo '{"allowed":true,"context":"global","type":"network"}';else echo '{"allowed":false,"context":"global","type":"network","deny_kind":"implicit"}';exit 1;fi;;
  'policy init') printf 'POLICY SOURCE APPLIES TO SUMMARY\ndefault-deny-all local all network: deny when no rule decides\n' > "$GLOBAL";;
  'policy reset') ;;
  *) if [[ "$1" == ls ]];then echo 'other-project running';elif [[ "$1" == diagnose && "${AUTH_REQUIRED:-0}" == 1 && ! -e "$AUTH_MARKER" ]];then echo 'Authentication required: run sbx login';exit 1;elif [[ "$1" == login ]];then touch "$AUTH_MARKER";fi;;
@@ -128,6 +130,68 @@ func TestGlobalPolicyConfirmationAndCancel(t *testing.T) {
 			got := trace(t, path)
 			if strings.Contains(got, "policy reset --force") != apply {
 				t.Fatal(got)
+			}
+		})
+	}
+}
+
+func TestImplicitDefaultDenyWithoutNamedRule(t *testing.T) {
+	path := mockSBX(t)
+	os.WriteFile(os.Getenv("GLOBAL"), []byte("POLICY SOURCE APPLIES TO SUMMARY\nlocal-policy local all filesystem read: 1 allow\n"), 0600)
+	s := selection()
+	s.Network, s.Sites = "restricted", "example.com"
+	if err := prepareGlobalPolicy(s, io.Discard, func(string) bool {
+		t.Fatal("implicit default deny must not prompt for a shared reset")
+		return false
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyNetwork("test-sandbox", s, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	got := trace(t, path)
+	if strings.Contains(got, "policy reset") || strings.Contains(got, "policy init") {
+		t.Fatal("changed shared policy", got)
+	}
+	if strings.Count(got, "policy check network --json https://vscode-sandboxes-default-probe.invalid") != 2 || strings.Contains(got, "policy check network --sandbox") {
+		t.Fatal("must verify global default at preparation and application", got)
+	}
+}
+
+func TestInstalledDockerDefaultPolicy(t *testing.T) {
+	if os.Getenv("VSCODE_TEST_INSTALLED_DOCKER_POLICY") != "1" {
+		t.Skip("opt in to read-only installed Docker policy verification")
+	}
+	listing, err := output("policy", "ls")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok, err := verifyDenyDefault(listing)
+	if err != nil || !ok {
+		t.Fatalf("default deny not verified: %v", err)
+	}
+}
+
+func TestDefaultPolicyVerificationFailsClosed(t *testing.T) {
+	for _, response := range []string{
+		`{"allowed":true,"context":"global","type":"network"}`,
+		`{"allowed":false,"context":"global","type":"network","deny_kind":"explicit"}`,
+		`{"allowed":false,"context":"sandbox:test-sandbox","type":"network","deny_kind":"implicit"}`,
+		`{"context":"global","type":"network","deny_kind":"implicit"}`,
+		`{"allowed":false,"context":"global","type":"filesystem","deny_kind":"implicit"}`,
+		`not JSON`,
+	} {
+		t.Run(response, func(t *testing.T) {
+			path := mockSBX(t)
+			os.WriteFile(os.Getenv("GLOBAL"), []byte("POLICY SOURCE APPLIES TO SUMMARY\n"), 0600)
+			t.Setenv("DECISION", response)
+			s := selection()
+			s.Network, s.Sites = "restricted", "example.com"
+			if err := applyNetwork("test-sandbox", s, io.Discard); err == nil {
+				t.Fatal("accepted unverifiable default")
+			}
+			if got := trace(t, path); strings.Contains(got, "--resource **") || strings.Contains(got, "policy allow") {
+				t.Fatal("opened network before verifying default", got)
 			}
 		})
 	}

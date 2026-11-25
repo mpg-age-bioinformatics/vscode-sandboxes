@@ -13,6 +13,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 ASSET = pathlib.Path(__file__).resolve().parents[1]/'internal/startui/remote_assets/network.py'
@@ -50,7 +51,7 @@ class NetworkTests(unittest.TestCase):
         self.directory = self.root/('a'*90)/('b'*90)
         self.directory.mkdir(parents=True)
         profile = self.root/'profile.json'
-        profile.write_text(json.dumps({'network': 'restricted', 'sites': f'127.0.0.1:{self.port}'}))
+        profile.write_text(json.dumps({'network': 'restricted', 'allowPrivateNetwork': True, 'sites': f'127.0.0.1:{self.port}'}))
         self.process = subprocess.Popen([sys.executable, str(ASSET), 'gateway', str(profile), str(self.directory)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         for _ in range(100):
             if (self.directory/'proxy.sock').exists():
@@ -90,6 +91,20 @@ class NetworkTests(unittest.TestCase):
                 if not block:
                     return bytes(data)
                 data.extend(block)
+
+    def test_private_destinations_and_pinned_dns(self):
+        for address in ('127.0.0.1', '10.0.0.1', '169.254.169.254', '::1', 'fc00::1', '224.0.0.1'):
+            entries = [(socket.AF_INET, socket.SOCK_STREAM, 6, '', (address, 443))]
+            with patch.object(n.socket, 'getaddrinfo', return_value=entries), patch.object(n.socket, 'socket') as create:
+                with self.assertRaises(ValueError): n.connect_destination('allowed.example', 443)
+                create.assert_not_called()
+        entries = [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]
+        with patch.object(n.socket, 'getaddrinfo', return_value=entries) as resolve, patch.object(n.socket, 'socket') as create:
+            n.connect_destination('allowed.example', 443)
+            resolve.assert_called_once()
+            create.return_value.connect.assert_called_once_with(('8.8.8.8', 443))
+        with n.connect_destination('127.0.0.1', self.port, allow_private=True) as stream:
+            self.assertIsNotNone(stream)
 
     def test_matching(self):
         rules = ['example.org', '*.sub.example.org', '**.wide.example.org', 'models.example.org:8443']

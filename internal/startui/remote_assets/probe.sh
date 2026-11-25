@@ -17,10 +17,10 @@ fi
 [[ "${queue##*|}" == "vscode-sandboxes:$token" ]] || { echo 'STATE=ENDED'; echo 'The saved Slurm job ID now belongs to another allocation.'; exit 0; }
 # Reuse/restart the same server monitor during normal app interaction. This
 # registration does not renew the sandbox's authenticated-connection clock.
-if [[ -f "$run/watchdog.py" ]]; then python3 "$run/watchdog.py" register "$run" "$token" "$job" >/dev/null; fi
+if [[ -f "$run/watchdog.py" ]]; then python3 -I "$run/watchdog.py" register "$run" "$token" "$job" >/dev/null; fi
 printf 'QUEUE=%s\n' "$queue"
 # Return bounded incremental output without interpreting log lines as protocol fields.
-python3 - "$run" "$job" "$offset" <<'PYLOG'
+python3 -I - "$run" "$job" "$offset" <<'PYLOG'
 import base64,pathlib,sys
 run=pathlib.Path(sys.argv[1])
 try:

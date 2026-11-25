@@ -44,6 +44,28 @@ def allowed(host, port, rules):
     return False
 
 
+def connect_destination(host, port, allow_private=False):
+    # Resolve once, validate every returned address, then connect to the selected
+    # numeric address. Never validate one DNS result and re-resolve on connect.
+    addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    if not addresses:
+        raise ValueError('No destination address')
+    for family, kind, protocol, _, address in addresses:
+        ip = ipaddress.ip_address(address[0].split('%')[0])
+        if not allow_private and (not ip.is_global or ip.is_multicast):
+            raise ValueError('Non-public destinations require explicit permission')
+    last = None
+    for family, kind, protocol, _, address in addresses:
+        stream = socket.socket(family, kind, protocol)
+        try:
+            stream.settimeout(20)
+            stream.connect(address)
+            return stream
+        except OSError as error:
+            last = error
+            stream.close()
+    raise last
+
 def transfer(left, right):
     """Bounded-memory duplex forwarding, including TCP half closes."""
     def copy(source, destination):
@@ -136,7 +158,7 @@ class Gateway(socketserver.BaseRequestHandler):
                 return
             # Resolve on the gateway only. One selected address is used by connect;
             # container DNS and all direct IP traffic remain unavailable.
-            upstream = socket.create_connection((host, port), timeout=20)
+            upstream = connect_destination(host, port, getattr(self.server, 'allow_private', False))
             upstream.settimeout(3600)
             if method == 'CONNECT':
                 self.request.sendall(b'HTTP/1.1 200 Connection Established\r\n\r\n')
@@ -213,6 +235,7 @@ def main():
         os.chdir(sys.argv[3])
         with Server('proxy.sock', Gateway) as server:
             server.rules = tuple(rules)
+            server.allow_private = profile.get('allowPrivateNetwork') is True
             os.chmod('proxy.sock', 0o600)
             server.serve_forever()
     elif mode == 'proxy-bridge':

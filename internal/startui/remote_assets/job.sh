@@ -33,6 +33,7 @@ fi
 child=""
 gateway=""
 cleanup() {
+ if [[ -n "$child" ]]; then kill -TERM "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; fi
  if [[ -n "$gateway" ]]; then kill "$gateway" 2>/dev/null || true; wait "$gateway" 2>/dev/null || true; fi
  # renv deliberately makes sandbox cache directories read-only. Restore owner
  # traversal/write rights only within this allocation's disposable tree.
@@ -106,7 +107,7 @@ if [[ -f "$run/watchdog.py" ]]; then
  mkdir -p "$temporary/home/.ssh"
  cat > "$temporary/home/.ssh/rc" <<'SSHRC'
 # OpenSSH invokes this after authentication; never write to stdout.
-python3 /run/vscode-launcher/watchdog.py connected /run/vscode-launcher >/dev/null
+python3 -I /run/vscode-launcher/watchdog.py connected /run/vscode-launcher >/dev/null
 SSHRC
  chmod 700 "$temporary/home/.ssh"; chmod 600 "$temporary/home/.ssh/rc"
 fi
@@ -120,29 +121,33 @@ if [[ "$container_tmp" == *' '* ]]; then
 fi
 # Restricted workspaces have no external interfaces. The gateway lives in the
 # batch shell's network/PID namespace and sees only an immutable allowlist.
-network="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("network") or "open")' "$run/profile.json")"
+network="$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1])).get("network") or "open")' "$run/profile.json")"
 [[ "$network" == open || "$network" == restricted || "$network" == none ]] || { echo 'Invalid internet policy.' >&2; exit 1; }
 network_args=()
 if [[ "$network" != open ]]; then
  printf '%s\n' 'Provisioning editor without project/data access' > "$run/startup-phase"
  mkdir -p "$temporary/provision" "$temporary/provision-runtime" "$temporary/ssh" "$temporary/network"
  for asset in prepare-editor.py prepare-continue.py install-continue.js; do cp "$run/$asset" "$temporary/provision/$asset"; done
- python3 - "$run/profile.json" "$temporary/provision/profile.json" <<'PYPROFILE'
+ python3 -I - "$run/profile.json" "$temporary/provision/profile.json" <<'PYPROFILE'
 import json,sys
 profile=json.load(open(sys.argv[1]))
 with open(sys.argv[2],'w') as output:json.dump({key:profile.get(key) for key in ('editorCommit','editorExtensions')},output)
 PYPROFILE
  # No project, additional folders, keys, module scripts or run directory are
  # exposed to this trusted helper. It shares only the fresh editor home.
- secure_apptainer exec --cleanenv --containall --no-init --no-eval --no-privs --drop-caps ALL --no-mount hostfs,cwd,bind-paths,sys --security "seccomp:$run/seccomp-agents.json" --workdir "$temporary/provision-runtime" --home "$temporary/home:$passwd_home" --bind "$temporary/provision:/run/vscode-launcher:ro" --bind "$TMPDIR:$container_tmp:rw" --env "TMPDIR=$container_tmp,TMP=$container_tmp,TEMP=$container_tmp" --pwd / "$image" python3 /run/vscode-launcher/prepare-editor.py &
+ secure_apptainer exec --cleanenv --containall --no-init --no-eval --no-privs --drop-caps ALL --no-mount hostfs,cwd,bind-paths,sys --security "seccomp:$run/seccomp-agents.json" --workdir "$temporary/provision-runtime" --home "$temporary/home:$passwd_home" --bind "$temporary/provision:/run/vscode-launcher:ro" --bind "$TMPDIR:$container_tmp:rw" --env "TMPDIR=$container_tmp,TMP=$container_tmp,TEMP=$container_tmp" --pwd / "$image" python3 -I /run/vscode-launcher/prepare-editor.py &
  child=$!
  wait "$child"
  child=""
  readlink /proc/self/ns/net > "$run/host-network-namespace"
  printf '%s\n' "$temporary/ssh" > "$run/ssh-socket-directory"
- network_args=(--net --network none --bind "$temporary/ssh:/run/vscode-ssh:rw")
+ # Apptainer may synthesize an empty /etc/hosts for --network none. Remote
+ # editor tunnels use the name localhost, even when the browser uses 127.0.0.1.
+ # Supply only loopback aliases; never expose the host's cluster name mappings.
+ printf '127.0.0.1 localhost\n::1 ip6-localhost ip6-loopback\n' > "$temporary/hosts"
+ network_args=(--net --network none --bind "$temporary/hosts:/etc/hosts:ro" --bind "$temporary/ssh:/run/vscode-ssh:rw")
  if [[ "$network" == restricted ]]; then
-  python3 "$run/network.py" gateway "$run/profile.json" "$temporary/network" &
+  python3 -I "$run/network.py" gateway "$run/profile.json" "$temporary/network" &
   gateway=$!
   for ((attempt=0;attempt<100;attempt++)); do
    kill -0 "$gateway" || { echo 'Allowlist gateway failed.' >&2; exit 1; }
@@ -180,4 +185,8 @@ printf '%s\n' "$apptainer" > "$run/apptainer"
 # Keep the batch shell to forward termination and clean its temporary subfolder.
 secure_apptainer "${args[@]}" "$image" /bin/bash /run/vscode-launcher/container.sh "$node" "$SLURM_JOB_ID" "$project" &
 child=$!
+if [[ -f "$run/watchdog-policy" ]]; then
+ python3 -I "$run/watchdog.py" anchor "$run" "$child"
+fi
 wait "$child"
+child=""

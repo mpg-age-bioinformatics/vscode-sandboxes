@@ -51,10 +51,10 @@ if [[ -f "$run/ssh-socket-directory" ]]; then
  [[ "$directory" == /* ]] || exit 1
  # Trusted fixed byte-forwarder only, outside the workspace. The socket is
  # reachable across network namespaces; no host TCP listener is created.
- exec srun "${args[@]}" env -i PATH="$PATH" HOME="$HOME" USER="$(id -un)" python3 -u -c "$python" "$port" "$directory"
+ exec srun "${args[@]}" env -i PATH="$PATH" HOME="$HOME" USER="$(id -un)" python3 -I -u -c "$python" "$port" "$directory"
 fi
 # Same kernel policy on the transport helper; it receives no project/home binds.
 # env -i prevents host bind/environment switches from reopening the host filesystem.
 exec srun "${args[@]}" env -i PATH="$PATH" HOME="$HOME" USER="$(id -un)" \
  "$apptainer" exec --cleanenv --containall --no-init --no-eval --no-privs --drop-caps ALL \
- --no-mount hostfs,cwd,bind-paths,sys --security "seccomp:$run/seccomp-agents.json" "$image" python3 -u -c "$python" "$port"
+ --no-mount hostfs,cwd,bind-paths,sys --security "seccomp:$run/seccomp-agents.json" "$image" python3 -I -u -c "$python" "$port"
