@@ -168,6 +168,16 @@ binaries identify release source commit `85ab818233179a7eec1fa732a11504e5c1b3dfd
 verified to show `v1.2.2` in the footer bar attached to the bottom of the UI.
 This startup check did not launch or modify any sandbox allocation.
 
+The initial hosted Linux run failed on test fixtures: `/tmp` project locations
+were rejected by the intentional mount policy, unread pipelined socket data
+caused Linux to reset the test connection, and concurrent watchdog registration
+could require the normal 60-second poll before exit. Test-only follow-up commits
+use the runner's non-reserved temporary directory, preserve received responses
+on socket reset and allow one production polling interval. Application sources,
+the published release tag and download checksums are unchanged by these fixes.
+The [hosted Linux security rerun](https://github.com/mpg-age-bioinformatics/vscode-sandboxes/actions/runs/45530088333)
+passed the full Go suite, vet, vulnerability gate and container security regressions.
+
 ### SHA-256 checksums
 
 ```
